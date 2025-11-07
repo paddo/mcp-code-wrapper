@@ -5,6 +5,8 @@
 
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 interface MCPRequest {
   jsonrpc: '2.0';
@@ -20,19 +22,59 @@ interface MCPResponse {
   error?: any;
 }
 
+interface MCPConfig {
+  command: string;
+  args: string[];
+  description?: string;
+}
+
 /**
- * MCP Client that communicates with Chrome DevTools MCP server via stdio
+ * MCP Client that communicates with MCP server via stdio
  */
 export class MCPClient extends EventEmitter {
   private process: any;
   private requestId = 0;
   private pendingRequests = new Map<number, { resolve: Function; reject: Function }>();
   private buffer = '';
+  private config?: MCPConfig;
+  private env?: Record<string, string>;
 
-  async start() {
-    // Start Chrome DevTools MCP server
-    this.process = spawn('npx', ['-y', 'chrome-devtools-mcp@latest'], {
+  async start(serverName?: string) {
+    // Load config from .mcp.json
+    try {
+      const mcpJsonPath = join(process.cwd(), '.mcp.json');
+      const mcpContent = await readFile(mcpJsonPath, 'utf-8');
+      const mcpConfig = JSON.parse(mcpContent);
+
+      // Use specified server or first available
+      const server = serverName || Object.keys(mcpConfig.mcpServers || {})[0];
+
+      if (!server || !mcpConfig.mcpServers?.[server]) {
+        throw new Error(`Server "${server}" not found in .mcp.json`);
+      }
+
+      const serverConfig = mcpConfig.mcpServers[server];
+      this.config = {
+        command: serverConfig.command,
+        args: serverConfig.args || []
+      };
+      this.env = serverConfig.env || {};
+
+      console.log(`📡 Using MCP server: ${server}`);
+    } catch (e) {
+      // Fallback to Chrome DevTools if no config found
+      console.warn('⚠️  No .mcp.json found, using default Chrome DevTools MCP');
+      this.config = {
+        command: 'npx',
+        args: ['-y', 'chrome-devtools-mcp@latest']
+      };
+      this.env = {};
+    }
+
+    // Start MCP server with config
+    this.process = spawn(this.config.command, this.config.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...this.env }
     });
 
     // Handle stdout data

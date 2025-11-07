@@ -5,3 +5,4 @@ api-universal/
 .DS_Store
 .env
 .env.local
+mcp-config.json

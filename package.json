@@ -1,18 +1,33 @@
 {
   "name": "mcp-code-wrapper",
   "version": "1.0.0",
-  "description": "Code execution wrapper for Chrome DevTools MCP - progressive tool discovery experiment",
+  "description": "Generate code execution wrappers for MCP servers with progressive tool discovery (96% context savings)",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "mcp-code-wrapper": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "generate": "tsx src/generator-universal.ts",
     "measure": "tsx src/measure-tokens.ts"
   },
-  "keywords": ["mcp", "chrome-devtools", "code-execution", "context-engineering"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "code-execution",
+    "context-engineering",
+    "progressive-discovery",
+    "claude-code",
+    "chrome-devtools"
+  ],
   "author": "paddo",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paddo/mcp-code-wrapper"
+  },
   "packageManager": "pnpm@10.20.0",
   "devDependencies": {
     "@types/node": "^24.10.0",

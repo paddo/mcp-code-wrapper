@@ -207,13 +207,17 @@ ${categoryNames.map(cat => `export * as ${cat} from './${cat}/index.js';`).join(
 `;
 }
 
+
 async function generateFilesystem(
   command: string,
   args: string[] = [],
   outputDir: string = 'api-universal',
-  serverName: string = 'MCP'
+  serverName: string = 'MCP',
+  env: Record<string, string> = {},
+  skipConfig: boolean = false
 ) {
-  const apiDir = path.join(process.cwd(), outputDir);
+  // Handle both relative and absolute paths
+  const apiDir = path.isAbsolute(outputDir) ? outputDir : path.join(process.cwd(), outputDir);
 
   // Clean and create API directory
   await fs.rm(apiDir, { recursive: true, force: true });
@@ -274,15 +278,706 @@ async function generateFilesystem(
   console.log('✅ Universal filesystem structure generated!');
   console.log(`📊 Total: ${Object.keys(categories).length} categories, ${tools.length} tools`);
   console.log(`📁 Output: ${apiDir}/`);
+
   console.log('\n🌍 This approach works with ANY MCP server!');
 }
 
+async function loadMCPConfig(mcpJsonPath: string, serverName: string): Promise<{ command: string; args: string[]; env: Record<string, string> }> {
+  const content = await fs.readFile(mcpJsonPath, 'utf-8');
+  const config = JSON.parse(content);
+
+  const serverConfig = config.mcpServers?.[serverName];
+  if (!serverConfig) {
+    throw new Error(`Server "${serverName}" not found in ${mcpJsonPath}`);
+  }
+
+  return {
+    command: serverConfig.command,
+    args: serverConfig.args || [],
+    env: serverConfig.env || {}
+  };
+}
+
+function parseEnvString(envString: string): Record<string, string> {
+  // Parse "KEY=val,KEY2=val2" or "KEY=val KEY2=val2"
+  const separator = envString.includes(',') ? ',' : ' ';
+  return Object.fromEntries(
+    envString.split(separator)
+      .filter(pair => pair.trim())
+      .map(pair => {
+        const [key, ...valueParts] = pair.split('=');
+        return [key.trim(), valueParts.join('=').trim()];
+      })
+  );
+}
+
+async function discoverMCPConfig(projectPath: string): Promise<string | null> {
+  // Look for .mcp.json in project
+  const mcpJsonPath = path.join(projectPath, '.mcp.json');
+  try {
+    await fs.access(mcpJsonPath);
+    return mcpJsonPath;
+  } catch {
+    return null;
+  }
+}
+
+async function discoverGlobalMCPConfig(): Promise<string | null> {
+  // Look for MCP config in ~/.claude/
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (!home) return null;
+
+  const possiblePaths = [
+    path.join(home, '.claude', 'mcp.json'),
+    path.join(home, '.claude', '.mcp.json'),
+    path.join(home, '.config', 'claude', 'mcp.json'),
+  ];
+
+  for (const mcpPath of possiblePaths) {
+    try {
+      await fs.access(mcpPath);
+      return mcpPath;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function generateAllFromProject(projectPath: string, createSkills: boolean = false) {
+  console.log(`\n🔍 Discovering MCP servers in ${projectPath}\n`);
+
+  const mcpJsonPath = await discoverMCPConfig(projectPath);
+  if (!mcpJsonPath) {
+    throw new Error(`No .mcp.json found in ${projectPath}`);
+  }
+
+  console.log(`✅ Found ${mcpJsonPath}\n`);
+
+  const content = await fs.readFile(mcpJsonPath, 'utf-8');
+  const config = JSON.parse(content);
+  const servers = Object.keys(config.mcpServers || {});
+
+  console.log(`📦 Discovered ${servers.length} MCP servers:\n`);
+  servers.forEach(name => console.log(`   - ${name}`));
+  console.log();
+
+  // Phase 1: Extract tools from all servers
+  console.log(`🔬 Phase 1: Extracting tools from all MCP servers...\n`);
+  const serverTools = new Map<string, MCPTool[]>();
+  const serverConfigs = new Map<string, { command: string; args: string[]; env: Record<string, string> }>();
+
+  for (const serverName of servers) {
+    const serverConfig = await loadMCPConfig(mcpJsonPath, serverName);
+    serverConfigs.set(serverName, serverConfig);
+
+    const cwd = process.cwd();
+    process.chdir(projectPath);
+    const tools = await extractToolsFromMCP(serverConfig.command, serverConfig.args);
+    process.chdir(cwd);
+
+    serverTools.set(serverName, tools);
+    console.log(`   ✅ ${serverName}: ${tools.length} tools`);
+  }
+
+  // Phase 2: Detect duplicates
+  console.log(`\n🔎 Phase 2: Detecting duplicate MCPs...\n`);
+  const duplicates = detectDuplicateMCPs(serverTools);
+  const serverToWrapper = new Map<string, string>();
+
+  if (duplicates.size > 0) {
+    console.log(`   Found ${duplicates.size} shared wrapper(s):\n`);
+    for (const [sharedName, servers] of duplicates.entries()) {
+      console.log(`   📦 ${sharedName}/ (shared by: ${servers.join(', ')})`);
+      servers.forEach(s => serverToWrapper.set(s, sharedName));
+    }
+    console.log();
+  } else {
+    console.log(`   No duplicates detected.\n`);
+  }
+
+  // Phase 3: Generate wrappers (deduplicated)
+  console.log(`🔧 Phase 3: Generating wrappers...\n`);
+  const generatedWrappers = new Set<string>();
+
+  for (const serverName of servers) {
+    console.log(`\n${'='.repeat(70)}`);
+    console.log(`🔧 Processing: ${serverName}`);
+    console.log('='.repeat(70) + '\n');
+
+    const serverConfig = serverConfigs.get(serverName)!;
+    const tools = serverTools.get(serverName)!;
+    const wrapperName = serverToWrapper.get(serverName) || serverName;
+    const outputDir = path.join(projectPath, '.mcp-wrappers', wrapperName);
+
+    // Only generate wrapper if not already generated (deduplicate)
+    if (!generatedWrappers.has(wrapperName)) {
+      const cwd = process.cwd();
+      process.chdir(projectPath);
+
+      await generateFilesystem(
+        serverConfig.command,
+        serverConfig.args,
+        outputDir,
+        wrapperName,
+        serverConfig.env,
+        true // Skip config saving, we use .mcp.json directly
+      );
+
+      process.chdir(cwd);
+      generatedWrappers.add(wrapperName);
+    } else {
+      console.log(`   ♻️  Reusing shared wrapper: ${wrapperName}/`);
+    }
+
+    if (createSkills) {
+      console.log(`\n🎯 Creating Claude Code Skill wrapper...`);
+      // Each server gets its own Skill (with unique description), but may reference shared wrapper
+      await generateSkillWrapper(projectPath, serverName, outputDir, tools, serverConfig.env);
+    }
+  }
+
+  // Save server-to-wrapper mapping
+  if (serverToWrapper.size > 0) {
+    const mappingPath = path.join(projectPath, '.mcp-wrappers', '.mcp-server-mapping.json');
+    const mapping: Record<string, string> = {};
+    for (const [server, wrapper] of serverToWrapper.entries()) {
+      mapping[server] = wrapper;
+    }
+    await fs.writeFile(mappingPath, JSON.stringify(mapping, null, 2));
+    console.log(`\n💾 Saved server mapping: .mcp-wrappers/.mcp-server-mapping.json`);
+  }
+
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`✅ Generated wrappers for ${servers.length} MCP servers`);
+  console.log(`📁 Output: ${projectPath}/.mcp-wrappers/`);
+
+  // Update .gitignore
+  await updateGitignore(projectPath);
+
+  // Disable MCPs (keeps them in .mcp.json for executor)
+  console.log();
+  await disableMCPServers(mcpJsonPath);
+
+  // Show restart message
+  console.log();
+  printRestartMessage();
+
+  console.log('='.repeat(70));
+}
+
+async function updateGitignore(projectPath: string) {
+  const gitignorePath = path.join(projectPath, '.gitignore');
+  let gitignoreContent = '';
+
+  try {
+    gitignoreContent = await fs.readFile(gitignorePath, 'utf-8');
+  } catch {
+    // No .gitignore exists, create one
+  }
+
+  const entries = ['.mcp-wrappers/', 'mcp-config.json'];
+  let updated = false;
+
+  for (const entry of entries) {
+    if (!gitignoreContent.includes(entry)) {
+      gitignoreContent += `\n${entry}`;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    await fs.writeFile(gitignorePath, gitignoreContent.trim() + '\n');
+    console.log(`📝 Updated .gitignore (added .mcp-wrappers/ and mcp-config.json)`);
+  }
+}
+
+async function disableMCPServers(mcpJsonPath: string) {
+  const content = await fs.readFile(mcpJsonPath, 'utf-8');
+  const config = JSON.parse(content);
+
+  // Create backup
+  const backupPath = mcpJsonPath.replace('.mcp.json', '.mcp.json.backup');
+  await fs.writeFile(backupPath, content);
+  console.log(`💾 Created backup: ${path.basename(backupPath)}`);
+
+  // Disable all MCP servers by adding "disabled: true"
+  const servers = config.mcpServers || {};
+  for (const serverName of Object.keys(servers)) {
+    servers[serverName].disabled = true;
+  }
+
+  await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
+  console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers`);
+  console.log(`   MCPs stay in .mcp.json for executor reference`);
+  console.log(`   Restore with: mv ${path.basename(backupPath)} ${path.basename(mcpJsonPath)}`);
+}
+
+/**
+ * Generate a hash of tool signatures for duplicate detection
+ */
+function generateToolSignature(tools: MCPTool[]): string {
+  // Create a stable hash from tool names and their input schemas
+  const signature = tools
+    .map(t => `${t.name}:${JSON.stringify(t.inputSchema)}`)
+    .sort()
+    .join('|');
+  return signature;
+}
+
+/**
+ * Detect duplicate MCPs by comparing tool signatures
+ * Returns a map of shared wrapper names to server names
+ */
+function detectDuplicateMCPs(serverTools: Map<string, MCPTool[]>): Map<string, string[]> {
+  const signatureToServers = new Map<string, string[]>();
+
+  // Group servers by their tool signatures
+  for (const [serverName, tools] of serverTools.entries()) {
+    const signature = generateToolSignature(tools);
+    const servers = signatureToServers.get(signature) || [];
+    servers.push(serverName);
+    signatureToServers.set(signature, servers);
+  }
+
+  // Create shared wrapper names for duplicates
+  const sharedWrappers = new Map<string, string[]>();
+  for (const servers of signatureToServers.values()) {
+    if (servers.length > 1) {
+      // Multiple servers share the same tools - create shared wrapper
+      // Use base name (remove suffixes like -main, -media, -dev, -prod)
+      const baseName = servers[0].replace(/-(main|media|dev|prod|test|staging)$/i, '');
+      sharedWrappers.set(baseName, servers);
+    }
+  }
+
+  return sharedWrappers;
+}
+
+/**
+ * Extract safe database context from environment variables
+ * Returns formatted context string without exposing secrets
+ */
+function extractSafeDbContext(env: Record<string, string>): string {
+  // Safe env var patterns
+  const SAFE_PATTERNS = {
+    database: /^(DATABASE_NAME|DB_NAME|DATABASE|POSTGRES_DATABASE|PGDATABASE|MYSQL_DATABASE|MYSQL_DB|MDB_MCP_DEFAULT_DATABASE|DB_DATABASE)$/i,
+    host: /^(SERVER_NAME|HOST|HOSTNAME|POSTGRES_HOST|PGHOST|MYSQL_HOST|DB_HOST|REDIS_HOST|MSSQL_SERVER|DB_SERVER)$/i,
+    port: /^(PORT|DB_PORT|POSTGRES_PORT|PGPORT|MYSQL_PORT|MSSQL_PORT|REDIS_PORT)$/i,
+    readonly: /^(READ_ONLY|READONLY|MDB_MCP_READ_ONLY|MCP_MONGODB_READONLY)$/i,
+  };
+
+  // Unsafe patterns - never display these
+  const UNSAFE_PATTERNS = /(PASSWORD|PASS|PWD|USER|USERNAME|SECRET|KEY|TOKEN|CONNECTION_STRING|CONNECTIONSTRING)/i;
+
+  const context: string[] = [];
+
+  // Extract database name
+  const dbName = Object.entries(env).find(([key]) =>
+    SAFE_PATTERNS.database.test(key) && !UNSAFE_PATTERNS.test(key)
+  )?.[1];
+
+  // Extract host
+  const host = Object.entries(env).find(([key]) =>
+    SAFE_PATTERNS.host.test(key) && !UNSAFE_PATTERNS.test(key)
+  )?.[1];
+
+  // Extract port
+  const port = Object.entries(env).find(([key]) =>
+    SAFE_PATTERNS.port.test(key) && !UNSAFE_PATTERNS.test(key)
+  )?.[1];
+
+  // Extract readonly flag
+  const readonly = Object.entries(env).find(([key]) =>
+    SAFE_PATTERNS.readonly.test(key) && !UNSAFE_PATTERNS.test(key)
+  )?.[1];
+
+  // Build context string
+  if (dbName) {
+    if (host) {
+      context.push(`on '${dbName}' database (${host}${port ? ':' + port : ''})`);
+    } else {
+      context.push(`on '${dbName}' database`);
+    }
+  } else if (host) {
+    context.push(`connected to ${host}${port ? ':' + port : ''}`);
+  }
+
+  // Add readonly mode if specified
+  if (readonly && (readonly.toLowerCase() === 'true' || readonly === '1')) {
+    context.push('(read-only mode)');
+  }
+
+  return context.length > 0 ? ' ' + context.join(' ') : '';
+}
+
+async function generateSkillDescription(wrapperDir: string, tools: MCPTool[], env: Record<string, string> = {}): Promise<string> {
+  // Read categories from generated index
+  let categories: string[] = [];
+  try {
+    const indexPath = path.join(wrapperDir, 'index.ts');
+    const indexContent = await fs.readFile(indexPath, 'utf-8');
+    const categoryMatches = indexContent.match(/export \* as (\w+) from/g);
+    categories = categoryMatches?.map(m => m.match(/as (\w+)/)?.[1]).filter((c): c is string => Boolean(c)) || [];
+  } catch (e) {
+    // Continue without categories
+  }
+
+  // Detect MCP purpose from categories and tool names
+  const toolNames = tools.map(t => t.name.toLowerCase()).join(' ');
+  const categoryNames = categories.join(' ').toLowerCase();
+  const allText = `${toolNames} ${categoryNames}`;
+
+  // Browser/Chrome DevTools patterns (check first to avoid false positives from 'select_page')
+  if (categories.includes('navigation') || categories.includes('input') || categories.includes('debugging') ||
+      allText.includes('browser') || allText.includes('chrome')) {
+    const capabilities = [];
+    if (categories.includes('navigation') || allText.includes('navigate')) capabilities.push('navigate pages');
+    if (categories.includes('input') || allText.includes('click') || allText.includes('fill')) capabilities.push('fill forms');
+    if (allText.includes('screenshot')) capabilities.push('take screenshots');
+    if (categories.includes('network')) capabilities.push('inspect network');
+    if (allText.includes('console') || allText.includes('evaluate')) capabilities.push('debug JavaScript');
+
+    const caps = capabilities.length > 0 ? capabilities.join(', ') : 'automate browser';
+    return `Automate browser interactions and testing: ${caps}. Use when testing web pages, automating browser tasks, or debugging web applications.`;
+  }
+
+  // Database MCP patterns (more specific checks to avoid false positives)
+  if (allText.includes('sql') || allText.includes('database') ||
+      allText.includes('insert_data') || allText.includes('read_data') ||
+      allText.includes('update_data') || allText.includes('create_table')) {
+    const capabilities = [];
+    if (allText.includes('read') || allText.includes('select') || allText.includes('query')) capabilities.push('read data');
+    if (allText.includes('insert') || allText.includes('write')) capabilities.push('insert records');
+    if (allText.includes('update')) capabilities.push('update tables');
+    if (allText.includes('delete')) capabilities.push('delete records');
+    if (allText.includes('schema')) capabilities.push('manage schemas');
+
+    const caps = capabilities.length > 0 ? capabilities.join(', ') : 'execute SQL queries';
+    const dbContext = extractSafeDbContext(env);
+    return `Execute SQL database operations${dbContext}: ${caps}. Use when working with databases, running SQL queries, reading/writing data, or managing database tables and schemas.`;
+  }
+
+  // Filesystem patterns
+  if (allText.includes('file') || allText.includes('read_file') || allText.includes('write_file') ||
+      allText.includes('directory') || allText.includes('list_files')) {
+    const capabilities = [];
+    if (allText.includes('read')) capabilities.push('read files');
+    if (allText.includes('write')) capabilities.push('write files');
+    if (allText.includes('list') || allText.includes('directory')) capabilities.push('list directories');
+    if (allText.includes('delete')) capabilities.push('delete files');
+
+    const caps = capabilities.length > 0 ? capabilities.join(', ') : 'manage files';
+    return `File system operations: ${caps}. Use when working with files, reading/writing file contents, or managing directories.`;
+  }
+
+  // Git patterns
+  if (allText.includes('git') || allText.includes('commit') || allText.includes('branch')) {
+    const capabilities = [];
+    if (allText.includes('log') || allText.includes('history')) capabilities.push('view history');
+    if (allText.includes('diff')) capabilities.push('view changes');
+    if (allText.includes('commit')) capabilities.push('commit changes');
+    if (allText.includes('branch')) capabilities.push('manage branches');
+
+    const caps = capabilities.length > 0 ? capabilities.join(', ') : 'Git operations';
+    return `${caps}. Use when working with Git repositories, viewing commit history, or managing version control.`;
+  }
+
+  // Figma patterns
+  if (allText.includes('figma') || allText.includes('design') || allText.includes('component')) {
+    return `Interact with Figma designs: read files, get components, inspect properties. Use when working with Figma designs or extracting design specifications.`;
+  }
+
+  // Generic fallback - build from categories and tool descriptions
+  if (categories.length > 0) {
+    const descriptions = tools.map(t => t.description || '').filter(d => d);
+    const actions = descriptions
+      .map(desc => {
+        const match = desc.match(/^([A-Z][a-z]+(?:\s+[a-z]+){0,2})/);
+        return match ? match[1].toLowerCase() : null;
+      })
+      .filter(Boolean);
+
+    const uniqueActions = [...new Set(actions)].slice(0, 3);
+    const summary = uniqueActions.length > 0 ? uniqueActions.join(', ') : 'execute operations';
+
+    return `Provides ${tools.length} tools for ${summary}. Categories: ${categories.slice(0, 3).join(', ')}. Use when working with related operations or mentioned tools.`;
+  }
+
+  return `Execute MCP server operations (${tools.length} tools available). Check the API documentation for specific capabilities.`;
+}
+
+async function extractToolsFromWrapper(wrapperDir: string): Promise<MCPTool[]> {
+  const tools: MCPTool[] = [];
+
+  async function readDir(dir: string) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        await readDir(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.includes('index.ts')) {
+        try {
+          const content = await fs.readFile(fullPath, 'utf-8');
+
+          // Extract description from JSDoc comment
+          const jsdocMatch = content.match(/\/\*\*\s*\n\s*\*\s*(.+?)\n/);
+          const descMatch = content.match(/description: ['"`](.+?)['"`]/);
+          const nameMatch = content.match(/name: ['"`](.+?)['"`]/);
+
+          if (nameMatch) {
+            tools.push({
+              name: nameMatch[1],
+              description: jsdocMatch?.[1] || descMatch?.[1] || '',
+              inputSchema: { type: 'object' }
+            });
+          }
+        } catch (e) {
+          // Skip if we can't parse
+        }
+      }
+    }
+  }
+
+  try {
+    await readDir(wrapperDir);
+  } catch (e) {
+    // If we can't read tools, return empty array
+  }
+
+  return tools;
+}
+
+function printRestartMessage() {
+  console.log(`⚠️  IMPORTANT: Restart Claude Code to load new Skills`);
+  console.log(`   Run: claude -c`);
+  console.log();
+  console.log(`   Skills will use .mcp.json config to spawn servers on-demand.`);
+  console.log(`   MCPs are disabled but config is preserved for the executor.`);
+}
+
+async function generateSkillWrapper(projectPath: string, serverName: string, wrapperDir: string, tools: MCPTool[], env: Record<string, string> = {}) {
+  const skillsDir = path.join(projectPath, '.claude', 'skills');
+  await fs.mkdir(skillsDir, { recursive: true });
+
+  const skillName = `mcp-${serverName}`;
+  const skillDir = path.join(skillsDir, skillName);
+  await fs.mkdir(skillDir, { recursive: true });
+
+  // Generate capability-focused description from actual tool metadata
+  const description = await generateSkillDescription(wrapperDir, tools, env);
+
+  // Create skill.json
+  const skillJson = {
+    name: skillName,
+    description,
+    version: "1.0.0"
+  };
+  await fs.writeFile(
+    path.join(skillDir, 'skill.json'),
+    JSON.stringify(skillJson, null, 2)
+  );
+
+  // Extract actual wrapper name from path (handles deduplicated wrappers)
+  const wrapperName = path.basename(wrapperDir);
+
+  // Read categories from generated index to find example tools
+  let exampleTool: MCPTool | null = null;
+  let exampleCategory = 'other';
+
+  try {
+    const indexPath = path.join(wrapperDir, 'index.ts');
+    const indexContent = await fs.readFile(indexPath, 'utf-8');
+    const categoryMatches = indexContent.match(/export \* as (\w+) from/g);
+    const categories = categoryMatches?.map(m => m.match(/as (\w+)/)?.[1]).filter((c): c is string => Boolean(c)) || [];
+
+    // Pick first non-empty category and first tool
+    for (const category of categories) {
+      const categoryPath = path.join(wrapperDir, category);
+      const files = await fs.readdir(categoryPath);
+      const toolFile = files.find(f => f.endsWith('.ts') && f !== 'index.ts');
+
+      if (toolFile) {
+        exampleCategory = category;
+        const toolName = toolFile.replace('.ts', '');
+        exampleTool = tools.find(t => t.name === toolName) || null;
+        break;
+      }
+    }
+  } catch (e) {
+    // Use first tool as fallback
+    exampleTool = tools[0] || null;
+  }
+
+  // Generate example code based on actual tool
+  let exampleCode = '';
+  if (exampleTool) {
+    const toolName = exampleTool.name;
+    const params = exampleTool.inputSchema?.properties ? Object.keys(exampleTool.inputSchema.properties).slice(0, 2) : [];
+
+    // Generate example params based on tool name patterns
+    let exampleParams = '{}';
+    if (toolName.includes('read') || toolName.includes('query')) {
+      exampleParams = `{ query: 'SELECT * FROM users LIMIT 10' }`;
+    } else if (toolName.includes('navigate')) {
+      exampleParams = `{ type: 'url', url: 'https://example.com' }`;
+    } else if (toolName.includes('click')) {
+      exampleParams = `{ selector: '#submit-button' }`;
+    } else if (toolName.includes('screenshot')) {
+      exampleParams = `{ fullPage: false }`;
+    } else if (toolName.includes('insert') || toolName.includes('write')) {
+      exampleParams = `{ table: 'users', data: { name: 'John' } }`;
+    } else if (params.length > 0) {
+      exampleParams = `{ ${params[0]}: 'value' }`;
+    }
+
+    exampleCode = `import { ${toolName} } from './.mcp-wrappers/${wrapperName}/${exampleCategory}/${toolName}.js';
+
+const result = await ${toolName}(${exampleParams});`;
+  } else {
+    exampleCode = `import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+
+const result = await tool_name({ param: 'value' });`;
+  }
+
+  // Create instructions.md pointing to the wrapper
+  const instructions = `# ${serverName} MCP Wrapper
+
+This skill provides access to the ${serverName} MCP server through a code execution API.
+
+## Usage
+
+The API is available in: \`.mcp-wrappers/${wrapperName}/\`
+
+Explore the generated TypeScript API:
+1. Read \`index.ts\` to see available categories
+2. Navigate to a category (e.g., \`${exampleCategory}/\`)
+3. Read individual tool files for documentation
+4. Import and use tools in your code
+
+## Example
+
+\`\`\`typescript
+${exampleCode}
+\`\`\`
+`;
+  await fs.writeFile(
+    path.join(skillDir, 'instructions.md'),
+    instructions
+  );
+
+  console.log(`   ✅ Created skill: .claude/skills/${skillName}/`);
+}
+
 // CLI usage
-const command = process.argv[2] || 'npx';
-const args = process.argv[3] ? process.argv.slice(3) : ['-y', 'chrome-devtools-mcp@latest'];
-const outputDir = process.env.OUTPUT_DIR || 'api-universal';
-const serverName = process.env.SERVER_NAME || 'Chrome DevTools MCP';
+async function main() {
+  const args = process.argv.slice(2);
 
-console.log(`\n🚀 Command: ${command} ${args.join(' ')}\n`);
+  // Check for flags
+  const isGlobal = args.includes('--global') || args.length === 0;
 
-generateFilesystem(command, args, outputDir, serverName).catch(console.error);
+  // Remove flags from args for path detection
+  const pathArgs = args.filter(arg => !arg.startsWith('--'));
+
+  // Global mode: no args or --global flag
+  if (isGlobal && pathArgs.length === 0) {
+    console.log('\n🌍 Running in GLOBAL mode\n');
+
+    const home = process.env.HOME || process.env.USERPROFILE;
+    if (!home) {
+      throw new Error('Could not determine home directory');
+    }
+
+    const claudeDir = path.join(home, '.claude');
+    const mcpJsonPath = await discoverGlobalMCPConfig();
+
+    if (!mcpJsonPath) {
+      console.log(`⚠️  No MCP config found in ~/.claude/`);
+      console.log(`   Expected: ~/.claude/mcp.json or ~/.claude/.mcp.json`);
+      console.log();
+      console.log(`   To generate for a specific project instead:`);
+      console.log(`   pnpm run generate /path/to/project`);
+      return;
+    }
+
+    console.log(`✅ Found ${mcpJsonPath}\n`);
+
+    // Generate in ~/.claude/.mcp-wrappers/
+    await generateAllFromProject(claudeDir, true);
+    return;
+  }
+
+  // Project mode: first arg is a directory path
+  if (pathArgs.length === 1) {
+    const projectPath = path.resolve(pathArgs[0]);
+    try {
+      const stat = await fs.stat(projectPath);
+      if (stat.isDirectory()) {
+        // Auto-discover and generate all MCPs
+        await generateAllFromProject(projectPath, true);
+        return;
+      }
+    } catch {
+      // Not a directory, continue with other parsing
+    }
+  }
+
+  let command: string;
+  let commandArgs: string[];
+  let env: Record<string, string> = {};
+  let outputDir = 'api-universal';
+  let serverName = 'MCP';
+
+  // Check for --from-mcp-json flag
+  const mcpJsonIndex = args.indexOf('--from-mcp-json');
+  const serverIndex = args.indexOf('--server');
+  const envIndex = args.indexOf('--env');
+
+  if (mcpJsonIndex !== -1 && serverIndex !== -1) {
+    // Load from .mcp.json
+    const mcpJsonPath = args[mcpJsonIndex + 1];
+    const server = args[serverIndex + 1];
+
+    console.log(`\n📖 Loading config from ${mcpJsonPath} (server: ${server})\n`);
+
+    const config = await loadMCPConfig(mcpJsonPath, server);
+    command = config.command;
+    commandArgs = config.args;
+    env = config.env;
+    serverName = server;
+  } else if (envIndex !== -1) {
+    // Parse --env flag
+    const envString = args[envIndex + 1];
+    env = parseEnvString(envString);
+
+    // Get command/args (everything before --env)
+    const beforeEnv = args.slice(0, envIndex);
+    command = beforeEnv[0] || 'npx';
+    commandArgs = beforeEnv.slice(1);
+
+    if (commandArgs.length === 0) {
+      commandArgs = ['-y', 'chrome-devtools-mcp@latest'];
+    }
+  } else {
+    // Traditional CLI: pnpm run generate <command> <args...>
+    command = args[0] || 'npx';
+    commandArgs = args[1] ? args.slice(1) : ['-y', 'chrome-devtools-mcp@latest'];
+  }
+
+  // Set env vars for the spawned process
+  if (Object.keys(env).length > 0) {
+    Object.assign(process.env, env);
+  }
+
+  console.log(`\n🚀 Command: ${command} ${commandArgs.join(' ')}\n`);
+  if (Object.keys(env).length > 0) {
+    console.log(`🔐 Environment: ${Object.keys(env).length} variables\n`);
+  }
+
+  await generateFilesystem(command, commandArgs, outputDir, serverName, env);
+}
+
+main().catch(console.error);
