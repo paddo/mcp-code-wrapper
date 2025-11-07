@@ -1,7 +1,5 @@
 node_modules/
 dist/
-api/
-api-from-source/
 api-universal/
 *.log
 .DS_Store

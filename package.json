@@ -7,9 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "generate": "tsx src/generator.ts",
-    "generate:source": "tsx src/generator-from-source.ts",
-    "generate:universal": "tsx src/generator-universal.ts",
+    "generate": "tsx src/generator-universal.ts",
     "measure": "tsx src/measure-tokens.ts"
   },
   "keywords": ["mcp", "chrome-devtools", "code-execution", "context-engineering"],

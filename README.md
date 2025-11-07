@@ -61,10 +61,16 @@ api/
 ### Generate Filesystem Structure
 
 ```bash
+# Generate from Chrome DevTools MCP (default)
 pnpm run generate
+
+# Or from any other MCP server
+pnpm run generate npx -y @modelcontextprotocol/server-filesystem /tmp
 ```
 
-This creates the `api/` directory with TypeScript files for all Chrome DevTools MCP tools.
+This creates the `api-universal/` directory with TypeScript files for all MCP tools.
+
+**Works with ANY MCP server** - uses the MCP protocol to extract tool definitions.
 
 ### Run Test
 
