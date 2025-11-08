@@ -1,5 +1,10 @@
 # MCP Code Wrapper
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://badge.fury.io/js/mcp-code-wrapper.svg)](https://www.npmjs.com/package/mcp-code-wrapper)
+[![GitHub issues](https://img.shields.io/github/issues/paddo/mcp-code-wrapper)](https://github.com/paddo/mcp-code-wrapper/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 **Transform MCP tool definitions into progressive discovery APIs (96% context savings)**
 
 Generate code execution wrappers for Model Context Protocol servers with automatic progressive tool discovery. Reduces context usage by up to 96% while maintaining full MCP functionality.
@@ -356,6 +361,8 @@ Total: 550 tokens (98% savings)
 - Project with `.mcp.json` or global `~/.claude/mcp.json`
 
 ## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 This is an experimental project. See [CONTEXT.md](./CONTEXT.md) for current status and next steps.
 
