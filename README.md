@@ -98,7 +98,7 @@ Skills will use `.mcp.json` config to spawn servers on-demand with progressive d
 
 ## Token Economics
 
-### Real-World Example (famecake project)
+### Real-World Example
 
 **Before** (Direct MCP):
 - Chrome DevTools: 26 tools = 17,500 tokens
