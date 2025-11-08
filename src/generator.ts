@@ -1494,12 +1494,6 @@ function generateCapabilityHints(tools: MCPTool[]): string {
 function printRestartMessage() {
   console.log(`⚠️  IMPORTANT: Restart Claude Code to load new Skills`);
   console.log(`   Run: claude -c`);
-  console.log();
-  console.log(`   ⚠️  When Claude prompts to enable MCPs: DECLINE/TOGGLE OFF`);
-  console.log(`   Skills use progressive discovery - MCPs stay disabled.`);
-  console.log();
-  console.log(`   Skills will use .mcp.json config to spawn servers on-demand.`);
-  console.log(`   MCPs are disabled but config is preserved for the executor.`);
 }
 
 async function generateSkillWrapper(
