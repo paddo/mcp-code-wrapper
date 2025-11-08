@@ -121,15 +121,26 @@ async function generateToolFile(category: string, tool: MCPTool, serverName: str
 ${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.type)};`).join('\n')}
 }` : 'Record<string, never>';
 
+  // Escape description for safe embedding in strings
+  const description = (tool.description || tool.name).replace(/'/g, "\\'").replace(/\n/g, ' ');
+
   return `/**
  * ${tool.description || tool.name}
  * @category ${category}
  * @source ${serverName}
  */
 export async function ${tool.name}(params: ${paramInterface}): Promise<any> {
-  // This function is executed by the MCP wrapper
-  // The actual MCP tool call will be intercepted and executed
-  throw new Error('This function should be called through the MCP executor');
+  // Check if running in MCP executor context
+  const client = (global as any).__mcpClient;
+  if (!client) {
+    throw new Error(
+      'This function must be called through the MCP executor.\\n' +
+      'Run: npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} <your-code.ts>'
+    );
+  }
+
+  // Call the MCP tool via the client
+  return await client.callTool('${tool.name}', params);
 }
 
 /**
@@ -138,7 +149,7 @@ export async function ${tool.name}(params: ${paramInterface}): Promise<any> {
 export const metadata = {
   name: '${tool.name}',
   category: '${category}',
-  description: '${tool.description || ''}',
+  description: '${description}',
   parameters: ${JSON.stringify(params.map(p => p.name), null, 2)},
   inputSchema: ${JSON.stringify(tool.inputSchema, null, 2)},
 };
@@ -273,6 +284,26 @@ async function generateFilesystem(
   const rootIndexContent = await generateRootIndex(categories, serverName);
   await fs.writeFile(rootIndexFile, rootIndexContent);
   console.log(`📄 index.ts (root)\n`);
+
+  // Copy runtime executor to parent .mcp-wrappers directory (not per-server)
+  if (!skipConfig) {
+    const executorSource = path.join(path.dirname(new URL(import.meta.url).pathname), 'runtime-executor.ts');
+    const executorDest = path.join(path.dirname(apiDir), '.runtime-executor.ts');
+
+    try {
+      await fs.copyFile(executorSource, executorDest);
+      console.log(`📄 .runtime-executor.ts (copied to parent dir)\n`);
+    } catch (e) {
+      // If file doesn't exist in dist, copy from src
+      const srcExecutor = path.join(process.cwd(), 'src', 'runtime-executor.ts');
+      try {
+        await fs.copyFile(srcExecutor, executorDest);
+        console.log(`📄 .runtime-executor.ts (copied from src)\n`);
+      } catch (e2) {
+        console.log(`⚠️  Could not copy runtime executor (you may need to copy it manually)\n`);
+      }
+    }
+  }
 
   console.log('=' .repeat(70) + '\n');
   console.log('✅ Universal filesystem structure generated!');
@@ -940,20 +971,149 @@ description: ${description}
 
 This skill provides access to the ${serverName} MCP server through a code execution API.
 
-## Usage
+## Quick Start Template
+
+**COPY-PASTE THIS TEMPLATE** when writing code:
+
+\`\`\`typescript
+import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+
+export default async function() {
+  // Your code here
+  const result = await tool_name({ param: 'value' });
+
+  console.log('Result:', result);
+
+  // Optionally return data
+  return result;
+}
+\`\`\`
+
+**Critical:** Code MUST be wrapped in \`export default async function()\` - top-level await is not supported.
+
+## File Location
+
+- **Create scripts in:** \`.claude/temp/\` (this directory is safe for temporary files)
+- **Do NOT** create files in the main project directory
+- **Clean up** temporary scripts after execution
+
+## How to Use
+
+### Step 1: Explore the API
 
 The API is available in: \`.mcp-wrappers/${wrapperName}/\`
 
-Explore the generated TypeScript API:
 1. Read \`index.ts\` to see available categories
 2. Navigate to a category (e.g., \`${exampleCategory}/\`)
-3. Read individual tool files for documentation
-4. Import and use tools in your code
+3. Read individual tool files for documentation and parameter schemas
 
-## Example
+### Step 2: Write Your Code
+
+Create a TypeScript file in \`.claude/temp/\`:
 
 \`\`\`typescript
+// .claude/temp/my-query.ts
 ${exampleCode}
+
+export default async function() {
+  const result = await ${exampleTool?.name || 'tool_name'}(${exampleCode.match(/await.*?\((.*?)\)/)?.[1] || '{}'});
+  console.log('Result:', result);
+  return result;
+}
+\`\`\`
+
+### Step 3: Execute via Runtime
+
+**Server name:** \`${serverName}\` (use this exact name, not \`${wrapperName}\`)
+
+\`\`\`bash
+npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query.ts
+\`\`\`
+
+### Step 4: Clean Up
+
+After successful execution, delete the temporary script:
+
+\`\`\`bash
+rm ./.claude/temp/my-query.ts
+\`\`\`
+
+## Important Notes
+
+- **Server Name:** Always use \`${serverName}\` when executing (first argument to runtime-executor.ts)
+- **Wrapper Functions:** Must be called through the MCP executor (do NOT run directly)
+- **File Location:** Always use \`.claude/temp/\` for temporary scripts
+- **Code Pattern:** Must use \`export default async function()\` wrapper
+- **Cleanup:** Delete temporary files after use
+
+## Discovering Available Tools
+
+Each wrapper file contains metadata about the tool. Example from a wrapper file:
+
+\`\`\`typescript
+export const metadata = {
+  name: 'tool_name',
+  category: 'category_name',
+  description: 'What this tool does',
+  parameters: ['param1', 'param2'],
+  inputSchema: {
+    type: 'object',
+    properties: {
+      param1: { type: 'string', description: 'First parameter' },
+      param2: { type: 'number', description: 'Second parameter' }
+    },
+    required: ['param1']
+  }
+};
+\`\`\`
+
+**Read wrapper files to see:**
+- Available parameters
+- Which parameters are required
+- Parameter types and descriptions
+- Tool descriptions
+
+## Common Patterns
+
+**Single tool call:**
+\`\`\`typescript
+import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+
+export default async function() {
+  const result = await tool_name({ param1: 'value' });
+  console.log(result);
+}
+\`\`\`
+
+**Parsing MCP responses:**
+\`\`\`typescript
+export default async function() {
+  const result = await tool_name({ param: 'value' });
+
+  // MCP tools return: { content: [{ type: 'text', text: '...' }] }
+  const data = result.content?.[0]?.text
+    ? JSON.parse(result.content[0].text)
+    : result;
+
+  console.log('Parsed data:', data);
+  return data;
+}
+\`\`\`
+
+**Multiple operations:**
+\`\`\`typescript
+import { tool_one } from './.mcp-wrappers/${wrapperName}/category/tool_one.js';
+import { tool_two } from './.mcp-wrappers/${wrapperName}/category/tool_two.js';
+
+export default async function() {
+  const first = await tool_one({ param: 'value' });
+  const second = await tool_two({ param: 'other' });
+
+  console.log('First:', first);
+  console.log('Second:', second);
+
+  return { first, second };
+}
 \`\`\`
 `;
   await fs.writeFile(
