@@ -1074,7 +1074,14 @@ export default async function() {
 
 ## Available Tools
 
-${tools.map(t => `**${t.name}** - ${t.description || 'No description'}`).join('\n')}
+${(() => {
+  const categorized = categorizeTools(tools);
+  return Object.entries(categorized).map(([cat, catTools]) =>
+    `**${cat}/:**\n` + catTools.map(t =>
+      `- \`${t.name}\` - ${(t.description || 'No description').split('\n')[0]}`
+    ).join('\n')
+  ).join('\n\n');
+})()}
 
 Full schemas: \`.mcp-wrappers/${wrapperName}/\`
 
