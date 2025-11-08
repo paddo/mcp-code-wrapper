@@ -913,6 +913,41 @@ async function extractToolsFromWrapper(wrapperDir: string): Promise<MCPTool[]> {
   return tools;
 }
 
+function generateCapabilityHints(tools: MCPTool[]): string {
+  const toolNames = tools.map(t => t.name.toLowerCase());
+  const hints: string[] = [];
+
+  // Check for listing capabilities
+  const hasListTool = toolNames.some(n => n.includes('list'));
+  if (hasListTool) {
+    hints.push('- Has listing tools - check tool descriptions to see what metadata they return');
+  }
+
+  // Check for query/read capabilities
+  const hasQueryTool = toolNames.some(n => n.includes('query') || n.includes('read') || n.includes('select'));
+  if (hasQueryTool) {
+    hints.push('- Has query tools - prefer single queries over multiple calls when possible');
+  }
+
+  // Check for batch operations
+  const hasBatchParams = tools.some(t => {
+    const props = t.inputSchema?.properties || {};
+    return Object.keys(props).some(k => k.toLowerCase().includes('batch') ||
+                                       k.toLowerCase().includes('multiple') ||
+                                       (props[k] as any)?.type === 'array');
+  });
+  if (hasBatchParams) {
+    hints.push('- Some tools accept arrays - use batch operations when available');
+  }
+
+  // Generic hints if we detected limitations
+  if (!hints.length) {
+    hints.push('- Tools process items individually - optimize by reducing call count');
+  }
+
+  return hints.join('\n');
+}
+
 function printRestartMessage() {
   console.log(`⚠️  IMPORTANT: Restart Claude Code to load new Skills`);
   console.log(`   Run: claude -c`);
@@ -1037,11 +1072,11 @@ export default async function() {
 
 **Execute:** \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/script.ts\`
 
-## API Discovery
+## Available Tools
 
-Browse tools: \`.mcp-wrappers/${wrapperName}/\`
-- Read \`index.ts\` → see categories
-- Open category dir → read tool files for schemas
+${tools.slice(0, 10).map(t => `**${t.name}** - ${t.description || 'No description'}`).join('\n')}${tools.length > 10 ? `\n...and ${tools.length - 10} more` : ''}
+
+Browse all: \`.mcp-wrappers/${wrapperName}/\` → read tool files for full schemas
 
 ## Example
 
@@ -1060,6 +1095,10 @@ export default async function() {
 
 Run: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/example.ts\`
 Cleanup: \`rm ./.claude/temp/example.ts\`
+
+## Tool Capabilities
+
+${generateCapabilityHints(tools)}
 
 ## Best Practices
 
