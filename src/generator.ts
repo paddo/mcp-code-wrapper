@@ -710,7 +710,7 @@ async function generateAllFromProject(
   // Disable MCPs (keeps them in .mcp.json for executor)
   if (disableMCPs) {
     console.log();
-    await disableMCPServers(mcpJsonPath);
+    await disableMCPServers(mcpJsonPath, servers);
   }
 
   // Show restart message
@@ -746,18 +746,20 @@ async function updateGitignore(projectPath: string) {
   }
 }
 
-async function disableMCPServers(mcpJsonPath: string) {
+async function disableMCPServers(mcpJsonPath: string, serverNamesToDisable: string[]) {
   const content = await fs.readFile(mcpJsonPath, 'utf-8');
   const config = JSON.parse(content);
 
-  // Disable all MCP servers by adding "disabled: true"
+  // Disable only the selected MCP servers by adding "disabled: true"
   const servers = config.mcpServers || {};
-  for (const serverName of Object.keys(servers)) {
-    servers[serverName].disabled = true;
+  for (const serverName of serverNamesToDisable) {
+    if (servers[serverName]) {
+      servers[serverName].disabled = true;
+    }
   }
 
   await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
-  console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers in .mcp.json`);
+  console.log(`🔕 Disabled ${serverNamesToDisable.length} MCP servers in .mcp.json`);
 
   // Also disable in settings.local.json if it exists
   const projectPath = path.dirname(mcpJsonPath);
@@ -767,11 +769,17 @@ async function disableMCPServers(mcpJsonPath: string) {
     const settingsContent = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsContent);
 
-    // Disable MCPs
-    const serverNames = Object.keys(servers);
-    settings.enabledMcpjsonServers = [];
+    // Add selected servers to disabled list (preserve existing disabled servers)
+    const currentDisabled = settings.disabledMcpjsonServers || [];
+    const newDisabled = [...new Set([...currentDisabled, ...serverNamesToDisable])];
+
+    // Remove selected servers from enabled list
+    const currentEnabled = settings.enabledMcpjsonServers || [];
+    const newEnabled = currentEnabled.filter((s: string) => !serverNamesToDisable.includes(s));
+
+    settings.enabledMcpjsonServers = newEnabled;
     settings.enableAllProjectMcpServers = false;
-    settings.disabledMcpjsonServers = serverNames;
+    settings.disabledMcpjsonServers = newDisabled;
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`🔕 Disabled MCPs in settings.local.json`);
