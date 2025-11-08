@@ -964,16 +964,22 @@ const result = await tool_name({ param: 'value' });`;
   // Create SKILL.md with YAML frontmatter
   const skillContent = `---
 name: ${skillName}
-description: "CRITICAL: Import path must be ../../.mcp-wrappers/ (TWO dots, .ts extension). File location: .claude/temp/. ${description}"
+description: "Import: import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts'; (from .claude/temp/). ${description}"
 ---
 
 # ${serverName} MCP Wrapper
 
-**CRITICAL: Use import path \`../../.mcp-wrappers/\` (TWO dots, not one!)**
+**CREATE FILE IN:** \`.claude/temp/script.ts\`
 
-## Template (File: .claude/temp/script.ts)
+**IMPORT EXAMPLE (copy this exactly):**
+\`\`\`typescript
+import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
+\`\`\`
+
+## Complete Template
 
 \`\`\`typescript
+// File: .claude/temp/script.ts
 import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
@@ -986,11 +992,6 @@ export default async function() {
 \`\`\`
 
 **Execute:** \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/script.ts\`
-
-**Rules:**
-- File location: \`.claude/temp/\` (required)
-- Import path: \`../../.mcp-wrappers/\` (two dots, .ts extension)
-- Wrapper: \`export default async function()\` (required)
 
 ## API Discovery
 
