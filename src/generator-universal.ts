@@ -971,6 +971,23 @@ description: ${description}
 
 This skill provides access to the ${serverName} MCP server through a code execution API.
 
+## ⚠️ IMPORT PATH RULES (READ FIRST!)
+
+**CRITICAL:** Import paths MUST use exactly \`../../.mcp-wrappers/\` (TWO dots)
+
+\`\`\`typescript
+// ✅ CORRECT - Use exactly ../../ (two levels up)
+import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
+
+// ❌ WRONG - Do NOT use ../ (one level)
+import { tool_name } from '../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
+
+// ❌ WRONG - Do NOT use .js extension
+import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.js';
+\`\`\`
+
+**Why \`../../\`?** Scripts are in \`.claude/temp/\`, so you need to go up 2 levels to reach project root.
+
 ## Quick Start Template
 
 **COPY-PASTE THIS TEMPLATE** when writing code:
@@ -995,8 +1012,8 @@ export default async function() {
 \`\`\`
 
 **Critical:**
+- Import path: \`../../.mcp-wrappers/\` (two dots, .ts extension)
 - Code MUST be wrapped in \`export default async function()\` - top-level await is not supported
-- Import paths use \`../../\` because scripts are in \`.claude/temp/\` (2 levels up to project root)
 
 ## File Location
 
@@ -1055,10 +1072,10 @@ rm ./.claude/temp/my-query.ts
 
 ## Important Notes
 
+- **⚠️ Import Path:** ALWAYS use \`../../.mcp-wrappers/\` (TWO dots) with \`.ts\` extension
 - **Server Name:** Always use \`${serverName}\` when executing (first argument to runtime-executor.ts)
+- **File Location:** Scripts MUST be in \`.claude/temp/\` directory
 - **File Format:** Use \`.ts\` extension for your TypeScript scripts
-- **Import Paths:** Always use \`../../.mcp-wrappers/\` from \`.claude/temp/\` with \`.ts\` extension
-- **Import Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
 - **Code Pattern:** Must use \`export default async function()\` wrapper (top-level await not supported)
 - **Response Parsing:** Always parse MCP envelope: \`result.content?.[0]?.text\`
 - **Wrapper Functions:** Must be called through the MCP executor (do NOT run directly)
@@ -1190,10 +1207,12 @@ const data = parsed.data      // Query results
 
 ## Troubleshooting
 
-**Error: "Cannot find module '../../.mcp-wrappers/...'"**
-- **Cause:** Incorrect import path or file extension
-- **Fix:** Ensure script is in \`.claude/temp/\`, path starts with \`../../\`, and uses \`.ts\` extension
-- **Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
+**Error: "Cannot find module '../../.mcp-wrappers/...'" or "Cannot find module '../.mcp-wrappers/...'"**
+- **Cause:** Incorrect import path (wrong number of dots) or file extension
+- **Fix:** Use EXACTLY \`../../.mcp-wrappers/\` (TWO dots, not one!) with \`.ts\` extension
+- **Common Mistake:** Using \`../\` instead of \`../../\` - this WILL fail!
+- **Correct Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
+- **Path Breakdown:** \`.claude/temp/script.ts\` → \`../../\` (up 2 levels) → \`.mcp-wrappers/\`
 
 **Error: "undefined is not iterable" or "Cannot read property of undefined"**
 - **Cause:** Response structure differs from expected
