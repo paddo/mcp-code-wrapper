@@ -484,6 +484,24 @@ async function generateAllFromProject(
     console.log(`\n💾 Saved server mapping: .mcp-wrappers/.mcp-server-mapping.json`);
   }
 
+  // Copy runtime executor to .mcp-wrappers directory
+  const executorDest = path.join(projectPath, '.mcp-wrappers', '.runtime-executor.ts');
+  const executorSource = path.join(path.dirname(new URL(import.meta.url).pathname), 'runtime-executor.ts');
+
+  try {
+    await fs.copyFile(executorSource, executorDest);
+    console.log(`\n📄 Copied .runtime-executor.ts to .mcp-wrappers/`);
+  } catch (e) {
+    // If file doesn't exist in dist, copy from src
+    const srcExecutor = path.join(process.cwd(), 'src', 'runtime-executor.ts');
+    try {
+      await fs.copyFile(srcExecutor, executorDest);
+      console.log(`\n📄 Copied .runtime-executor.ts from src/`);
+    } catch (e2) {
+      console.log(`\n⚠️  Could not copy runtime executor (you may need to copy it manually)`);
+    }
+  }
+
   console.log(`\n${'='.repeat(70)}`);
   console.log(`✅ Generated wrappers for ${servers.length} MCP servers`);
   console.log(`📁 Output: ${projectPath}/.mcp-wrappers/`);
@@ -964,7 +982,7 @@ const result = await tool_name({ param: 'value' });`;
   // Create SKILL.md with YAML frontmatter
   const skillContent = `---
 name: ${skillName}
-description: "Import: import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts'; (from .claude/temp/). ${description}"
+description: ${description}
 ---
 
 # ${serverName} MCP Wrapper
