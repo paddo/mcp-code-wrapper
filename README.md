@@ -52,7 +52,10 @@ api-universal/
 
 ```bash
 # Via npx (no install needed)
-npx mcp-code-wrapper /path/to/project
+npx mcp-code-wrapper .                # Current directory
+npx mcp-code-wrapper /path/to/project # Specific project
+npx mcp-code-wrapper --global         # Global ~/.claude/ MCPs
+npx mcp-code-wrapper --help           # Show help
 
 # Or clone and run locally
 git clone https://github.com/paddo/mcp-code-wrapper
@@ -66,7 +69,8 @@ pnpm run generate /path/to/project
 **Project Mode** (converts all MCPs in a project):
 
 ```bash
-npx mcp-code-wrapper /Users/me/my-project
+npx mcp-code-wrapper .                # Current directory (explicit)
+npx mcp-code-wrapper /path/to/project # Specific directory
 ```
 
 What it does:
@@ -76,11 +80,9 @@ What it does:
 4. Disables MCPs (keeps config for executor)
 5. Updates `.gitignore`
 
-**Global Mode** (converts globally configured MCPs):
+**Global Mode** (explicit flag required):
 
 ```bash
-npx mcp-code-wrapper
-# or
 npx mcp-code-wrapper --global
 ```
 

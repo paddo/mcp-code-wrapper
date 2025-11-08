@@ -967,13 +967,45 @@ ${exampleCode}
   console.log(`   ✅ Created skill: .claude/skills/${skillName}/`);
 }
 
+function showHelp() {
+  console.log(`
+MCP Code Wrapper - Generate progressive discovery wrappers for MCP servers
+
+USAGE:
+  npx mcp-code-wrapper <directory>    Generate wrappers for project
+  npx mcp-code-wrapper --global       Generate wrappers for global MCPs
+  npx mcp-code-wrapper --restore [dir] Remove wrappers and re-enable MCPs
+  npx mcp-code-wrapper --help         Show this help
+
+EXAMPLES:
+  npx mcp-code-wrapper .              # Current directory
+  npx mcp-code-wrapper /path/to/app   # Specific project
+  npx mcp-code-wrapper --global       # Global ~/.claude/ MCPs
+  npx mcp-code-wrapper --restore      # Restore current directory
+  npx mcp-code-wrapper --restore .    # Restore current directory
+
+OPTIONS:
+  --no-disable                        Keep MCPs enabled after generating wrappers
+  --help, -h                          Show this help message
+
+MORE INFO:
+  https://github.com/paddo/mcp-code-wrapper
+`);
+}
+
 // CLI usage
 async function main() {
   const args = process.argv.slice(2);
 
   // Remove flags from args for path detection
-  const pathArgs = args.filter(arg => !arg.startsWith('--'));
-  const flags = args.filter(arg => arg.startsWith('--'));
+  const pathArgs = args.filter(arg => !arg.startsWith('--') && !arg.startsWith('-'));
+  const flags = args.filter(arg => arg.startsWith('--') || arg.startsWith('-'));
+
+  // Help mode
+  if (flags.includes('--help') || flags.includes('-h')) {
+    showHelp();
+    return;
+  }
 
   // Restore mode
   if (flags.includes('--restore')) {
@@ -984,10 +1016,16 @@ async function main() {
 
   // Check for disable flag (default is true)
   const disableMCPs = !flags.includes('--no-disable');
-  const isGlobal = flags.includes('--global') || args.length === 0;
+  const isGlobal = flags.includes('--global');
 
-  // Global mode: no args or --global flag
-  if (isGlobal && pathArgs.length === 0) {
+  // Show help if no directory provided and not in global mode
+  if (pathArgs.length === 0 && !isGlobal) {
+    showHelp();
+    return;
+  }
+
+  // Global mode: explicit --global flag
+  if (isGlobal) {
     console.log('\n🌍 Running in GLOBAL mode\n');
 
     const home = process.env.HOME || process.env.USERPROFILE;
@@ -1003,7 +1041,7 @@ async function main() {
       console.log(`   Expected: ~/.claude/mcp.json or ~/.claude/.mcp.json`);
       console.log();
       console.log(`   To generate for a specific project instead:`);
-      console.log(`   pnpm run generate /path/to/project`);
+      console.log(`   npx mcp-code-wrapper /path/to/project`);
       return;
     }
 
@@ -1014,9 +1052,9 @@ async function main() {
     return;
   }
 
-  // Project mode: first arg is a directory path
-  if (pathArgs.length === 1) {
-    const projectPath = path.resolve(pathArgs[0]);
+  // Project mode: use provided path or current directory
+  const projectPath = pathArgs.length > 0 ? path.resolve(pathArgs[0]) : process.cwd();
+  if (pathArgs.length <= 1) {
     try {
       const stat = await fs.stat(projectPath);
       if (stat.isDirectory()) {
