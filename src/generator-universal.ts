@@ -287,21 +287,30 @@ async function generateFilesystem(
 
   // Copy runtime executor to parent .mcp-wrappers directory (not per-server)
   if (!skipConfig) {
-    const executorSource = path.join(path.dirname(new URL(import.meta.url).pathname), 'runtime-executor.ts');
     const executorDest = path.join(path.dirname(apiDir), '.runtime-executor.ts');
+    const packageDir = path.dirname(new URL(import.meta.url).pathname);
 
-    try {
-      await fs.copyFile(executorSource, executorDest);
-      console.log(`📄 .runtime-executor.ts (copied to parent dir)\n`);
-    } catch (e) {
-      // If file doesn't exist in dist, copy from src
-      const srcExecutor = path.join(process.cwd(), 'src', 'runtime-executor.ts');
+    // Try both .js (dist) and .ts (src) extensions
+    const possibleSources = [
+      path.join(packageDir, 'runtime-executor.js'),
+      path.join(packageDir, 'runtime-executor.ts'),
+      path.join(packageDir, '..', 'src', 'runtime-executor.ts'),
+    ];
+
+    let copied = false;
+    for (const source of possibleSources) {
       try {
-        await fs.copyFile(srcExecutor, executorDest);
-        console.log(`📄 .runtime-executor.ts (copied from src)\n`);
-      } catch (e2) {
-        console.log(`⚠️  Could not copy runtime executor (you may need to copy it manually)\n`);
+        await fs.copyFile(source, executorDest);
+        console.log(`📄 .runtime-executor.ts (copied to parent dir)\n`);
+        copied = true;
+        break;
+      } catch (e) {
+        // Try next source
       }
+    }
+
+    if (!copied) {
+      console.log(`⚠️  Could not copy runtime executor (you may need to copy it manually)\n`);
     }
   }
 
@@ -486,20 +495,29 @@ async function generateAllFromProject(
 
   // Copy runtime executor to .mcp-wrappers directory
   const executorDest = path.join(projectPath, '.mcp-wrappers', '.runtime-executor.ts');
-  const executorSource = path.join(path.dirname(new URL(import.meta.url).pathname), 'runtime-executor.ts');
+  const packageDir = path.dirname(new URL(import.meta.url).pathname);
 
-  try {
-    await fs.copyFile(executorSource, executorDest);
-    console.log(`\n📄 Copied .runtime-executor.ts to .mcp-wrappers/`);
-  } catch (e) {
-    // If file doesn't exist in dist, copy from src
-    const srcExecutor = path.join(process.cwd(), 'src', 'runtime-executor.ts');
+  // Try both .js (dist) and .ts (src) extensions
+  const possibleSources = [
+    path.join(packageDir, 'runtime-executor.js'),
+    path.join(packageDir, 'runtime-executor.ts'),
+    path.join(packageDir, '..', 'src', 'runtime-executor.ts'),
+  ];
+
+  let copied = false;
+  for (const source of possibleSources) {
     try {
-      await fs.copyFile(srcExecutor, executorDest);
-      console.log(`\n📄 Copied .runtime-executor.ts from src/`);
-    } catch (e2) {
-      console.log(`\n⚠️  Could not copy runtime executor (you may need to copy it manually)`);
+      await fs.copyFile(source, executorDest);
+      console.log(`\n📄 Copied .runtime-executor.ts to .mcp-wrappers/`);
+      copied = true;
+      break;
+    } catch (e) {
+      // Try next source
     }
+  }
+
+  if (!copied) {
+    console.log(`\n⚠️  Could not copy runtime executor (you may need to copy it manually)`);
   }
 
   console.log(`\n${'='.repeat(70)}`);
