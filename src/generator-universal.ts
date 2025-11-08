@@ -1024,8 +1024,13 @@ import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name
 export default async function() {
   const result = await tool_name({ param: 'value' });
   const text = result.content?.[0]?.text;
-  const data = text ? JSON.parse(text) : result;
-  console.log(JSON.stringify(data, null, 2));
+  const parsed = text ? JSON.parse(text) : result;
+
+  // Inspect structure first
+  console.log('Response:', JSON.stringify(parsed, null, 2));
+
+  // Extract data (common: .items, .data, .rows, or direct)
+  const data = parsed.items || parsed.data || parsed.rows || parsed;
   return data;
 }
 \`\`\`
@@ -1058,18 +1063,17 @@ Cleanup: \`rm ./.claude/temp/example.ts\`
 
 ## Response Parsing
 
-MCP responses vary. Common patterns:
+**Always inspect response first, then extract data:**
 
 \`\`\`typescript
 const text = result.content?.[0]?.text;
 const parsed = text ? JSON.parse(text) : result;
-const data = parsed.data || parsed.items || parsed.rows || parsed;
-\`\`\`
 
-Inspect unknown structures:
-\`\`\`typescript
-console.log('Raw:', JSON.stringify(result, null, 2));
-console.log('Parsed:', JSON.stringify(parsed, null, 2));
+// Log to see actual structure
+console.log('Response:', JSON.stringify(parsed, null, 2));
+
+// Then extract (common: .items, .data, .rows, or direct)
+const data = parsed.items || parsed.data || parsed.rows || parsed;
 \`\`\`
 
 ## Troubleshooting
