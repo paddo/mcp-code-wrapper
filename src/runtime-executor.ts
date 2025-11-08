@@ -352,15 +352,8 @@ async function executeCode(serverName: string, codeFile: string) {
     }
   } finally {
     console.log('\n' + '='.repeat(70));
-    if (client) {
-      // For browser automation servers, add delay before cleanup to allow viewing results
-      if (serverName.includes('chrome') || serverName.includes('browser') || serverName.includes('playwright')) {
-        console.log('⏳ Browser automation detected - keeping browser open for 30 seconds...');
-        console.log('   Press Ctrl+C to close immediately');
-        await new Promise(resolve => setTimeout(resolve, 30000));
-      }
-      await client.stop();
-    }
+    // Don't stop the client - leave MCP server running for reuse
+    // It will clean up when the process exits
   }
 }
 
