@@ -975,8 +975,8 @@ This skill provides access to the ${serverName} MCP server through a code execut
 
 **COPY-PASTE THIS TEMPLATE** when writing code:
 
-\`\`\`javascript
-// .claude/temp/my-script.js
+\`\`\`typescript
+// .claude/temp/my-script.ts
 import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
@@ -1001,7 +1001,7 @@ export default async function() {
 ## File Location
 
 - **Create scripts in:** \`.claude/temp/\` (this directory is safe for temporary files)
-- **Script format:** Use \`.js\` extension - simpler and more token-efficient than TypeScript
+- **Script format:** Use \`.ts\` extension for TypeScript
 - **Import path:** Always use \`../../.mcp-wrappers/\` from \`.claude/temp/\`
 - **Import extension:** Use \`.ts\` when importing wrappers (wrapper files are TypeScript)
 - **Do NOT** create files in the main project directory
@@ -1019,10 +1019,10 @@ The API is available in: \`.mcp-wrappers/${wrapperName}/\`
 
 ### Step 2: Write Your Code
 
-Create a JavaScript file in \`.claude/temp/\`:
+Create a TypeScript file in \`.claude/temp/\`:
 
-\`\`\`javascript
-// .claude/temp/my-query.js
+\`\`\`typescript
+// .claude/temp/my-query.ts
 import { ${exampleTool?.name || 'tool_name'} } from '../../.mcp-wrappers/${wrapperName}/${exampleCategory}/${exampleTool?.name || 'tool_name'}.ts';
 
 export default async function() {
@@ -1042,7 +1042,7 @@ export default async function() {
 **Server name:** \`${serverName}\` (use this exact name, not \`${wrapperName}\`)
 
 \`\`\`bash
-npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query.js
+npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query.ts
 \`\`\`
 
 ### Step 4: Clean Up
@@ -1050,13 +1050,13 @@ npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query
 After successful execution, delete the temporary script:
 
 \`\`\`bash
-rm ./.claude/temp/my-query.js
+rm ./.claude/temp/my-query.ts
 \`\`\`
 
 ## Important Notes
 
 - **Server Name:** Always use \`${serverName}\` when executing (first argument to runtime-executor.ts)
-- **File Format:** Use \`.js\` extension for your scripts (JavaScript is simpler and more token-efficient)
+- **File Format:** Use \`.ts\` extension for your TypeScript scripts
 - **Import Paths:** Always use \`../../.mcp-wrappers/\` from \`.claude/temp/\` with \`.ts\` extension
 - **Import Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
 - **Code Pattern:** Must use \`export default async function()\` wrapper (top-level await not supported)
@@ -1094,7 +1094,7 @@ export const metadata = {
 ## Common Patterns
 
 **Single tool call:**
-\`\`\`javascript
+\`\`\`typescript
 import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
@@ -1110,7 +1110,7 @@ export default async function() {
 \`\`\`
 
 **Inspecting unknown response structures:**
-\`\`\`javascript
+\`\`\`typescript
 export default async function() {
   const result = await tool_name({ param: 'value' });
 
@@ -1134,7 +1134,7 @@ export default async function() {
 \`\`\`
 
 **Multiple operations:**
-\`\`\`javascript
+\`\`\`typescript
 import { tool_one } from '../../.mcp-wrappers/${wrapperName}/category/tool_one.ts';
 import { tool_two } from '../../.mcp-wrappers/${wrapperName}/category/tool_two.ts';
 
@@ -1175,7 +1175,7 @@ Different MCP tools return different data structures. Always inspect with \`cons
 - \`{ created: {...}, id: ... }\` - Creation results
 
 **Access pattern:**
-\`\`\`javascript
+\`\`\`typescript
 // Parse the MCP envelope
 const parsed = result.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
 
@@ -1198,7 +1198,7 @@ const data = parsed.data      // Query results
 **Error: "undefined is not iterable" or "Cannot read property of undefined"**
 - **Cause:** Response structure differs from expected
 - **Fix:** Use the inspection pattern to log the actual structure:
-  \`\`\`javascript
+  \`\`\`typescript
   console.log('Result:', JSON.stringify(result, null, 2));
   const parsed = result.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
   console.log('Parsed:', JSON.stringify(parsed, null, 2));
@@ -1211,7 +1211,7 @@ const data = parsed.data      // Query results
 
 **Error: "This function must be called through the MCP executor"**
 - **Cause:** Trying to run wrapper functions directly
-- **Fix:** Always execute via: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./script.js\`
+- **Fix:** Always execute via: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./script.ts\`
 
 **Execution hangs or times out:**
 - **Cause:** MCP server not responding or incorrect server name
