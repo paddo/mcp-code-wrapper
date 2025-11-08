@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paddo/mcp-code-wrapper"
+    "url": "git+https://github.com/paddo/mcp-code-wrapper.git"
   },
   "packageManager": "pnpm@10.20.0",
   "devDependencies": {
