@@ -1,7 +1,7 @@
 {
   "name": "mcp-code-wrapper",
-  "version": "0.1.0-beta.35",
-  "description": "Generate code execution wrappers for MCP servers with progressive tool discovery to save up-front context",
+  "version": "0.1.0-beta.36",
+  "description": "⚠️ EXPERIMENTAL - Generate code execution wrappers for MCP servers with progressive tool discovery to save up-front context",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -17,7 +17,9 @@
     "code-execution",
     "context-engineering",
     "progressive-discovery",
-    "claude-code"
+    "claude-code",
+    "experimental",
+    "beta"
   ],
   "author": "paddo",
   "license": "MIT",
