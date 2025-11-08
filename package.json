@@ -1,6 +1,6 @@
 {
   "name": "mcp-code-wrapper",
-  "version": "0.1.0-beta.34",
+  "version": "0.1.0-beta.35",
   "description": "Generate code execution wrappers for MCP servers with progressive tool discovery to save up-front context",
   "type": "module",
   "main": "dist/index.js",
