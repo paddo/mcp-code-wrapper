@@ -25,13 +25,13 @@ pnpm run generate /path/to/project
 ├── .mcp.json                          # Your existing config
 ├── .mcp-wrappers/                     # Generated wrappers
 │   ├── chrome-devtools/               # 26 tools, 7 categories
-│   ├── mssql-main/                    # 8 database tools
-│   └── mssql-media/                   # 8 database tools
+│   ├── database-server-1/             # 8 database tools
+│   └── database-server-2/             # 8 database tools
 └── .claude/
     └── skills/                        # Generated Skills
         ├── mcp-chrome-devtools/
-        ├── mcp-mssql-main/
-        └── mcp-mssql-media/
+        ├── mcp-database-server-1/
+        └── mcp-database-server-2/
 ```
 
 ### Global Mode
@@ -68,19 +68,19 @@ pnpm run generate /path/to/project --disable-mcps
 ### Generate for Specific MCP
 
 ```bash
-pnpm run generate --from-mcp-json /path/to/.mcp.json --server mssql-main
+pnpm run generate --from-mcp-json /path/to/.mcp.json --server database-server
 ```
 
 ### Generate with Custom Command
 
 ```bash
-pnpm run generate npx -y @wener/mssql-mcp --env "SERVER_NAME=localhost,DATABASE_NAME=test"
+pnpm run generate npx -y your-mcp-package --env "DB_HOST=your-host,DB_NAME=your-database"
 ```
 
 ### Generate with Environment Variables
 
 ```bash
-SERVER_NAME=localhost DATABASE_NAME=test pnpm run generate node /path/to/mcp-server.js
+DB_HOST=your-host DB_NAME=your-database pnpm run generate node /path/to/mcp-server.js
 ```
 
 ## After Generation
@@ -95,9 +95,9 @@ claude -c
 
 ### 2. Skills Redirect to Wrappers
 
-When you invoke a Skill (e.g., `/mcp-mssql-main`), Claude will:
+When you invoke a Skill (e.g., `/mcp-database-server`), Claude will:
 1. Read the Skill instructions
-2. Explore `.mcp-wrappers/mssql-main/index.ts`
+2. Explore `.mcp-wrappers/database-server/index.ts`
 3. Navigate to tool categories
 4. Read specific tool files on-demand
 5. Use the generated API
@@ -106,8 +106,8 @@ When you invoke a Skill (e.g., `/mcp-mssql-main`), Claude will:
 
 **Before** (Direct MCP):
 - All 26 Chrome DevTools tool definitions: **17,500 tokens**
-- All 8 MSSQL-main tool definitions: **5,600 tokens**
-- All 8 MSSQL-media tool definitions: **5,600 tokens**
+- All 8 Database Server 1 tool definitions: **5,600 tokens**
+- All 8 Database Server 2 tool definitions: **5,600 tokens**
 - **Total: 28,700 tokens (14.5% of context)**
 
 **After** (Progressive Discovery):
@@ -122,7 +122,7 @@ When you invoke a Skill (e.g., `/mcp-mssql-main`), Claude will:
 | MCP Server | Tools | Direct Load | Progressive (2 tools) | Savings |
 |------------|-------|-------------|----------------------|---------|
 | Chrome DevTools | 26 | 17,500 tokens | ~650 tokens | 96% |
-| MSSQL (x2) | 16 | 11,200 tokens | ~900 tokens | 92% |
+| Database (x2) | 16 | 11,200 tokens | ~900 tokens | 92% |
 | **Total** | 42 | **28,700 tokens** | **~1,550 tokens** | **95%** |
 
 Even using 10 tools from multiple MCPs still saves ~90% of context.
@@ -154,8 +154,8 @@ Session Start
 Generated Skills point to the wrappers:
 
 ```typescript
-// .claude/skills/mcp-mssql-main/instructions.md
-import { read_data } from './.mcp-wrappers/mssql-main/other/read_data.js';
+// .claude/skills/mcp-database-server/instructions.md
+import { read_data } from './.mcp-wrappers/database-server/queries/read_data.js';
 
 const result = await read_data({
   query: 'SELECT * FROM users LIMIT 10'
@@ -240,10 +240,10 @@ export const metadata = {
 
 ```bash
 # .env (secrets, gitignored)
-SERVER_NAME=52.56.35.107
-DATABASE_NAME=famecake
-SQL_USER=sa
-SQL_PASSWORD=***
+DB_HOST=your-host
+DB_NAME=your-database
+DB_USER=your-user
+DB_PASSWORD=***
 ```
 
 ## Examples
@@ -252,27 +252,27 @@ SQL_PASSWORD=***
 
 ```bash
 cd /Users/paddo/Projects/mcp-code-wrapper
-pnpm run generate /Users/paddo/Projects/rwa/famecake
+pnpm run generate /path/to/your-project
 ```
 
 Output:
 ```
-🔍 Discovering MCP servers in /Users/paddo/Projects/rwa/famecake
-✅ Found /Users/paddo/Projects/rwa/famecake/.mcp.json
+🔍 Discovering MCP servers in /path/to/your-project
+✅ Found /path/to/your-project/.mcp.json
 📦 Discovered 3 MCP servers:
    - chrome-devtools
-   - mssql-main
-   - mssql-media
+   - database-server-1
+   - database-server-2
 
 🔧 Generating wrapper for: chrome-devtools
    ✅ 26 tools in 7 categories
 🎯 Creating Claude Code Skill wrapper...
 
-🔧 Generating wrapper for: mssql-main
+🔧 Generating wrapper for: database-server-1
    ✅ 8 tools in 1 category
 🎯 Creating Claude Code Skill wrapper...
 
-🔧 Generating wrapper for: mssql-media
+🔧 Generating wrapper for: database-server-2
    ✅ 8 tools in 1 category
 🎯 Creating Claude Code Skill wrapper...
 

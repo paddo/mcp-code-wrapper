@@ -102,8 +102,8 @@ Skills will use `.mcp.json` config to spawn servers on-demand with progressive d
 
 **Before** (Direct MCP):
 - Chrome DevTools: 26 tools = 17,500 tokens
-- MSSQL-main: 8 tools = 5,600 tokens
-- MSSQL-media: 8 tools = 5,600 tokens
+- Database Server 1: 8 tools = 5,600 tokens
+- Database Server 2: 8 tools = 5,600 tokens
 - **Total: 28,700 tokens (14.5% of context)**
 
 **After** (Progressive Discovery):
@@ -136,15 +136,15 @@ Skills will use `.mcp.json` config to spawn servers on-demand with progressive d
       "args": ["chrome-devtools-mcp@latest"],
       "env": {}
     },
-    "mssql-main": {
+    "database-server": {
       "type": "stdio",
       "command": "node",
       "args": [".mcp-server/dist/index.js"],
       "env": {
-        "SERVER_NAME": "localhost",
-        "DATABASE_NAME": "mydb",
-        "SQL_USER": "sa",
-        "SQL_PASSWORD": "***"
+        "DB_HOST": "your-host",
+        "DB_NAME": "your-database",
+        "DB_USER": "your-user",
+        "DB_PASSWORD": "***"
       }
     }
   }
@@ -164,13 +164,13 @@ Output:
 
 📦 Discovered 2 MCP servers:
    - chrome-devtools
-   - mssql-main
+   - database-server
 
 🔧 Generating wrapper for: chrome-devtools
    ✅ 26 tools in 7 categories
 🎯 Creating Claude Code Skill wrapper...
 
-🔧 Generating wrapper for: mssql-main
+🔧 Generating wrapper for: database-server
    ✅ 8 tools in 1 category
 🎯 Creating Claude Code Skill wrapper...
 
@@ -199,8 +199,8 @@ Output:
 │   │   │   └── index.ts
 │   │   ├── debugging/
 │   │   └── index.ts
-│   └── mssql-main/
-│       ├── other/
+│   └── database-server/
+│       ├── queries/
 │       │   ├── read_data.ts
 │       │   ├── insert_data.ts
 │       │   └── index.ts
@@ -210,7 +210,7 @@ Output:
         ├── mcp-chrome-devtools/
         │   ├── skill.json
         │   └── instructions.md
-        └── mcp-mssql-main/
+        └── mcp-database-server/
             ├── skill.json
             └── instructions.md
 ```
@@ -221,15 +221,15 @@ When you invoke a Skill:
 
 ```typescript
 // Claude reads root index (100 tokens)
-import * as mssql from './.mcp-wrappers/mssql-main/index.ts';
-// Discovers: { other: {...} }
+import * as db from './.mcp-wrappers/database-server/index.ts';
+// Discovers: { queries: {...} }
 
 // Explores category (50 tokens)
-import * as other from './.mcp-wrappers/mssql-main/other/index.ts';
+import * as queries from './.mcp-wrappers/database-server/queries/index.ts';
 // Discovers: { read_data, insert_data, ... }
 
 // Reads specific tool (200 tokens)
-import { read_data } from './.mcp-wrappers/mssql-main/other/read_data.ts';
+import { read_data } from './.mcp-wrappers/database-server/queries/read_data.ts';
 // Gets full documentation and API
 
 // Uses tool
@@ -299,13 +299,13 @@ claude -c
 
 ```bash
 # Traditional command mode (for testing)
-pnpm run generate --from-mcp-json /path/to/.mcp.json --server mssql-main
+pnpm run generate --from-mcp-json /path/to/.mcp.json --server database-server
 ```
 
 ### Generate with Custom Environment
 
 ```bash
-SERVER_NAME=localhost DATABASE_NAME=test pnpm run generate node /path/to/mcp-server.js
+DB_HOST=your-host DB_NAME=your-database pnpm run generate node /path/to/mcp-server.js
 ```
 
 ## Project Structure
