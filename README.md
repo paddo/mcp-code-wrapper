@@ -100,6 +100,27 @@ claude -c
 
 Skills will use `.mcp.json` config to spawn servers on-demand with progressive discovery.
 
+### Verify Skills Are Loaded
+
+After restarting, ask Claude what skills it has:
+
+```
+> what skills do you have?
+
+I have access to three specialized skills:
+
+1. mcp-chrome-devtools - Browser automation and testing
+   - Navigate pages, fill forms, take screenshots
+   - Inspect network traffic, debug JavaScript
+
+2. mcp-mssql-dev - Database operations on 'app_dev' database
+   - Execute SQL queries, read/write data
+   - Manage tables and schemas
+
+3. mcp-mssql-prod - Database operations on 'app_prod' database
+   - Same SQL capabilities, production database
+```
+
 ## Token Economics
 
 ### Real-World Example
