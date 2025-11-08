@@ -503,11 +503,6 @@ async function disableMCPServers(mcpJsonPath: string) {
   const content = await fs.readFile(mcpJsonPath, 'utf-8');
   const config = JSON.parse(content);
 
-  // Create backup
-  const backupPath = mcpJsonPath.replace('.mcp.json', '.mcp.json.backup');
-  await fs.writeFile(backupPath, content);
-  console.log(`💾 Created backup: ${path.basename(backupPath)}`);
-
   // Disable all MCP servers by adding "disabled: true"
   const servers = config.mcpServers || {};
   for (const serverName of Object.keys(servers)) {
@@ -515,7 +510,7 @@ async function disableMCPServers(mcpJsonPath: string) {
   }
 
   await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
-  console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers`);
+  console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers in .mcp.json`);
 
   // Also disable in settings.local.json if it exists
   const projectPath = path.dirname(mcpJsonPath);
@@ -524,11 +519,6 @@ async function disableMCPServers(mcpJsonPath: string) {
   try {
     const settingsContent = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(settingsContent);
-
-    // Create backup
-    const settingsBackupPath = settingsPath + '.backup';
-    await fs.writeFile(settingsBackupPath, settingsContent);
-    console.log(`💾 Created backup: .claude/settings.local.json.backup`);
 
     // Disable MCPs
     settings.enabledMcpjsonServers = [];
@@ -573,36 +563,49 @@ async function restoreProject(projectPath: string) {
     console.log(`⚠️  No Skills found to remove`);
   }
 
-  // Restore .mcp.json from backup
+  // Re-enable MCPs in .mcp.json by removing "disabled" property
   const mcpJsonPath = path.join(projectPath, '.mcp.json');
-  const backupPath = path.join(projectPath, '.mcp.json.backup');
 
   try {
-    const backupContent = await fs.readFile(backupPath, 'utf-8');
-    await fs.writeFile(mcpJsonPath, backupContent);
-    await fs.rm(backupPath);
-    console.log(`✅ Restored .mcp.json from backup`);
-    console.log(`🗑️  Removed backup file`);
+    const content = await fs.readFile(mcpJsonPath, 'utf-8');
+    const config = JSON.parse(content);
+    const servers = config.mcpServers || {};
+
+    // Remove "disabled" property from each server
+    for (const serverName of Object.keys(servers)) {
+      delete servers[serverName].disabled;
+    }
+
+    await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
+    console.log(`✅ Re-enabled ${Object.keys(servers).length} MCP servers in .mcp.json`);
   } catch (e) {
-    console.log(`⚠️  No .mcp.json.backup found`);
+    console.log(`⚠️  No .mcp.json found`);
   }
 
-  // Restore settings.local.json from backup if it exists
+  // Re-enable MCPs in settings.local.json if it exists
   const settingsPath = path.join(projectPath, '.claude', 'settings.local.json');
-  const settingsBackupPath = settingsPath + '.backup';
 
   try {
-    const settingsBackupContent = await fs.readFile(settingsBackupPath, 'utf-8');
-    await fs.writeFile(settingsPath, settingsBackupContent);
-    await fs.rm(settingsBackupPath);
-    console.log(`✅ Restored .claude/settings.local.json from backup`);
-    console.log(`🗑️  Removed backup file`);
+    // Read current .mcp.json to get server names
+    const mcpContent = await fs.readFile(mcpJsonPath, 'utf-8');
+    const mcpConfig = JSON.parse(mcpContent);
+    const serverNames = Object.keys(mcpConfig.mcpServers || {});
+
+    // Update settings.local.json
+    const settingsContent = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(settingsContent);
+
+    settings.enabledMcpjsonServers = serverNames;
+    settings.enableAllProjectMcpServers = true;
+
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    console.log(`✅ Re-enabled MCPs in settings.local.json`);
   } catch (e) {
-    // No backup found, that's fine
+    // settings.local.json doesn't exist, that's fine
   }
 
   console.log(`\n✅ Project restored successfully`);
-  console.log(`⚠️  IMPORTANT: Restart Claude Code to remove Skills`);
+  console.log(`⚠️  IMPORTANT: Restart Claude Code to load MCPs`);
   console.log(`   Run: claude -c\n`);
 }
 

@@ -177,8 +177,8 @@ Output:
 ✅ Generated wrappers for 2 MCP servers
 📁 Output: /path/to/project/.mcp-wrappers/
 
-💾 Created backup: .mcp.json.backup
-🔕 Disabled 2 MCP servers
+🔕 Disabled 2 MCP servers in .mcp.json
+🔕 Disabled MCPs in settings.local.json
    MCPs stay in .mcp.json for executor reference
    Restore with: npx mcp-code-wrapper --restore
 
@@ -190,8 +190,7 @@ Output:
 
 ```
 /path/to/project/
-├── .mcp.json                    # MCPs disabled, config preserved
-├── .mcp.json.backup             # Original config (restore if needed)
+├── .mcp.json                    # MCPs disabled (in-place)
 ├── .mcp-wrappers/               # Generated code wrappers
 │   ├── chrome-devtools/
 │   │   ├── navigation/
@@ -207,6 +206,7 @@ Output:
 │       │   └── index.ts
 │       └── index.ts
 └── .claude/
+    ├── settings.local.json      # MCPs disabled (in-place)
     └── skills/                  # Auto-generated Skills
         ├── mcp-chrome-devtools/
         │   ├── skill.json
@@ -290,7 +290,7 @@ npx mcp-code-wrapper --global
 
 ### Restore Original MCPs
 
-Remove all generated wrappers and Skills, restore original .mcp.json:
+Remove all generated wrappers and Skills, re-enable MCPs:
 
 ```bash
 # Restore current directory
@@ -303,16 +303,10 @@ npx mcp-code-wrapper --restore /path/to/project
 This will:
 - Remove `.mcp-wrappers/` directory
 - Remove all `mcp-*` Skills from `.claude/skills/`
-- Restore `.mcp.json` from backup
-- Remove backup file
+- Re-enable MCPs in `.mcp.json` (removes `"disabled": true`)
+- Re-enable MCPs in `.claude/settings.local.json`
 
-**Manual restore (alternative):**
-```bash
-cd /path/to/project
-mv .mcp.json.backup .mcp.json
-rm -rf .mcp-wrappers .claude/skills/mcp-*
-claude -c
-```
+**No backup files created** - operates on config in-place to avoid accidentally committing secrets.
 
 ### Keep MCPs Enabled
 
@@ -322,7 +316,7 @@ By default, MCPs are disabled after wrapper generation. To keep them enabled:
 npx mcp-code-wrapper /path/to/project --no-disable
 ```
 
-This generates wrappers but leaves MCPs active (no backup created).
+This generates wrappers but leaves MCPs active in both `.mcp.json` and `.claude/settings.local.json`.
 
 ### Generate for Specific MCP
 

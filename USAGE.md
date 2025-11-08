@@ -51,17 +51,18 @@ pnpm run generate
 
 ### Disable MCPs After Import
 
-Optionally disable MCP servers after generating wrappers:
+By default, MCPs are disabled after generating wrappers:
 
 ```bash
-pnpm run generate /path/to/project --disable-mcps
+npx mcp-code-wrapper /path/to/project
 ```
 
 **What it does:**
-- Backs up `.mcp.json` to `.mcp.json.backup`
-- Adds `"disabled": true` to all MCP servers
+- Adds `"disabled": true` to all MCP servers in `.mcp.json`
+- Disables MCPs in `.claude/settings.local.json` if it exists
 - MCPs stop loading, Skills take over
-- Restore with: `mv .mcp.json.backup .mcp.json`
+- No backup files created (operates in-place for security)
+- Restore with: `npx mcp-code-wrapper --restore`
 
 ## Advanced Usage
 
