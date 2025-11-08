@@ -1074,9 +1074,9 @@ export default async function() {
 
 ## Available Tools
 
-${tools.slice(0, 10).map(t => `**${t.name}** - ${t.description || 'No description'}`).join('\n')}${tools.length > 10 ? `\n...and ${tools.length - 10} more` : ''}
+${tools.map(t => `**${t.name}** - ${t.description || 'No description'}`).join('\n')}
 
-Browse all: \`.mcp-wrappers/${wrapperName}/\` → read tool files for full schemas
+Full schemas: \`.mcp-wrappers/${wrapperName}/\`
 
 ## Example
 
