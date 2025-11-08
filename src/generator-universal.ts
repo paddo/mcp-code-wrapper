@@ -126,8 +126,12 @@ ${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.ty
 
   return `/**
  * ${tool.description || tool.name}
+ *
  * @category ${category}
  * @source ${serverName}
+ *
+ * @returns Response format: { success?, message?, items/data/rows?: [...] }
+ *          Extract data: \`result.items || result.data || result.rows || result\`
  */
 export async function ${tool.name}(params: ${paramInterface}): Promise<any> {
   // Check if running in MCP executor context
@@ -1043,6 +1047,23 @@ description: ${description}
 
 # ${serverName} MCP Wrapper
 
+## Response Format
+
+All tools return responses in this format (automatically normalized):
+\`\`\`json
+{
+  "success": true,
+  "message": "...",
+  "items": [...],    // or "data", "rows", or direct array
+  // ... other fields
+}
+\`\`\`
+
+**Extract data (use this pattern for ALL tools):**
+\`\`\`typescript
+const data = result.items || result.data || result.rows || result;
+\`\`\`
+
 **CREATE FILE IN:** \`.claude/temp/script.ts\`
 
 **IMPORT EXAMPLE (copy this exactly):**
@@ -1057,14 +1078,21 @@ import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name
 import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
-  // Responses are automatically normalized by the runtime executor
+  // Call tool - responses are automatically normalized
   const result = await tool_name({ param: 'value' });
 
-  // Inspect structure first
-  console.log('Response:', JSON.stringify(result, null, 2));
+  // Expected structure after normalization:
+  // { success: true, message: "...", items: [...] }
+  // OR { data: [...] } OR { rows: [...] } OR direct array [...]
 
-  // Extract data (common patterns: .items, .data, .rows, or use result directly)
+  // Extract data using this exact pattern:
   const data = result.items || result.data || result.rows || result;
+
+  if (Array.isArray(data)) {
+    // Process array elements
+    data.forEach(item => console.log(item));
+  }
+
   return data;
 }
 \`\`\`
