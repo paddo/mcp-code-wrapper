@@ -5,6 +5,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import readline from 'readline';
 import { MCPClient } from './executor.js';
 
 interface MCPTool {
@@ -113,7 +114,13 @@ function extractParameters(tool: MCPTool): { name: string; type: string; require
   }));
 }
 
-async function generateToolFile(category: string, tool: MCPTool, serverName: string): Promise<string> {
+async function generateToolFile(
+  category: string,
+  tool: MCPTool,
+  serverName: string,
+  serverType: 'typescript-local' | 'protocol' = 'protocol',
+  projectPath: string = process.cwd()
+): Promise<string> {
   const params = extractParameters(tool);
 
   // Generate parameter interface
@@ -124,7 +131,56 @@ ${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.ty
   // Escape description for safe embedding in strings
   const description = (tool.description || tool.name).replace(/'/g, "\\'").replace(/\n/g, ' ');
 
-  return `/**
+  // Capitalize first letter of tool name for class name
+  const className = tool.name.split('_').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+
+  if (serverType === 'typescript-local') {
+    // Direct TypeScript import - wrappers live in .mcp-server/dist/wrappers/
+    // This resolves all imports from the same node_modules!
+    return `/**
+ * ${tool.description || tool.name}
+ *
+ * @category ${category}
+ * @source ${serverName} (Direct TypeScript Import)
+ *
+ * @returns Response format: { success?, message?, items/data/rows?: [...] }
+ *          Extract data: \`result.items || result.data || result.rows || result\`
+ */
+
+import sql from 'mssql';
+import { createSqlConfig } from '../../index.js';
+import { ${className}Tool } from '../../tools/${className}Tool.js';
+
+let initialized = false;
+
+async function ensureInit() {
+  if (!initialized) {
+    const { config } = await createSqlConfig();
+    await sql.connect(config);
+    initialized = true;
+  }
+}
+
+export async function ${tool.name}(params: ${paramInterface}): Promise<any> {
+  await ensureInit();
+  const tool = new ${className}Tool();
+  return await tool.run(params);
+}
+
+/**
+ * Tool metadata for progressive discovery
+ */
+export const metadata = {
+  name: '${tool.name}',
+  category: '${category}',
+  description: '${description}',
+  parameters: ${JSON.stringify(params.map(p => p.name), null, 2)},
+  inputSchema: ${JSON.stringify(tool.inputSchema, null, 2)},
+};
+`;
+  } else {
+    // Protocol-based approach (current implementation)
+    return `/**
  * ${tool.description || tool.name}
  *
  * @category ${category}
@@ -158,6 +214,7 @@ export const metadata = {
   inputSchema: ${JSON.stringify(tool.inputSchema, null, 2)},
 };
 `;
+  }
 }
 
 function mapJsonSchemaType(jsonType: string): string {
@@ -229,7 +286,9 @@ async function generateFilesystem(
   outputDir: string = 'api-universal',
   serverName: string = 'MCP',
   env: Record<string, string> = {},
-  skipConfig: boolean = false
+  skipConfig: boolean = false,
+  serverType: 'typescript-local' | 'protocol' = 'protocol',
+  projectPath: string = process.cwd()
 ) {
   // Handle both relative and absolute paths
   const apiDir = path.isAbsolute(outputDir) ? outputDir : path.join(process.cwd(), outputDir);
@@ -270,7 +329,7 @@ async function generateFilesystem(
     const toolNames: string[] = [];
     for (const tool of categoryTools) {
       const toolFile = path.join(categoryDir, `${tool.name}.ts`);
-      const content = await generateToolFile(category, tool, serverName);
+      const content = await generateToolFile(category, tool, serverName, serverType, projectPath);
       await fs.writeFile(toolFile, content);
       toolNames.push(tool.name);
       console.log(`   ├─ ${tool.name}.ts`);
@@ -288,6 +347,8 @@ async function generateFilesystem(
   const rootIndexContent = await generateRootIndex(categories, serverName);
   await fs.writeFile(rootIndexFile, rootIndexContent);
   console.log(`📄 index.ts (root)\n`);
+
+  // TypeScript servers don't need separate init - wrappers are in .mcp-server/dist/wrappers/
 
   // Copy runtime executor to parent .mcp-wrappers directory (not per-server)
   if (!skipConfig) {
@@ -389,10 +450,84 @@ async function discoverGlobalMCPConfig(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Detect if an MCP server is a local TypeScript server
+ */
+async function detectServerType(
+  projectPath: string,
+  serverName: string,
+  serverConfig: { command: string; args: string[] }
+): Promise<'typescript-local' | 'protocol'> {
+  // Check if server points to a local .mcp-server directory
+  const args = serverConfig.args || [];
+
+  // Look for .mcp-server/dist/index.js in the args
+  const isLocalMcpServer = args.some(arg =>
+    arg.includes('.mcp-server/dist/index.js') ||
+    arg.includes('.mcp-server\\dist\\index.js')
+  );
+
+  if (!isLocalMcpServer) {
+    return 'protocol';
+  }
+
+  // Verify the directory actually exists
+  try {
+    const indexPath = path.join(projectPath, '.mcp-server', 'dist', 'index.js');
+    const toolsPath = path.join(projectPath, '.mcp-server', 'dist', 'tools');
+
+    await fs.access(indexPath);
+    await fs.access(toolsPath);
+
+    return 'typescript-local';
+  } catch {
+    return 'protocol';
+  }
+}
+
+/**
+ * Prompt user for input
+ */
+async function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+/**
+ * Interactive server selection
+ */
+async function selectServers(servers: string[]): Promise<string[]> {
+  console.log(`\n📦 Available MCP servers:\n`);
+  servers.forEach((name, i) => console.log(`   ${i + 1}. ${name}`));
+  console.log(`   a. All servers`);
+
+  const answer = await prompt('\nSelect servers (comma-separated numbers, or "a" for all): ');
+
+  if (answer.toLowerCase() === 'a') {
+    return servers;
+  }
+
+  const indices = answer.split(',').map(s => parseInt(s.trim()) - 1);
+  return indices
+    .filter(i => i >= 0 && i < servers.length)
+    .map(i => servers[i]);
+}
+
 async function generateAllFromProject(
   projectPath: string,
   createSkills: boolean = false,
-  disableMCPs: boolean = true
+  disableMCPs: boolean = true,
+  interactive: boolean = false,
+  specifiedServers?: string[]
 ) {
   console.log(`\n🔍 Discovering MCP servers in ${projectPath}\n`);
 
@@ -405,20 +540,52 @@ async function generateAllFromProject(
 
   const content = await fs.readFile(mcpJsonPath, 'utf-8');
   const config = JSON.parse(content);
-  const servers = Object.keys(config.mcpServers || {});
+  const allServers = Object.keys(config.mcpServers || {});
 
-  console.log(`📦 Discovered ${servers.length} MCP servers:\n`);
+  // Determine which servers to process
+  let servers: string[];
+
+  if (specifiedServers && specifiedServers.length > 0) {
+    // Validate specified servers exist
+    const invalidServers = specifiedServers.filter(s => !allServers.includes(s));
+    if (invalidServers.length > 0) {
+      console.log(`\n❌ Error: The following servers were not found in .mcp.json:`);
+      invalidServers.forEach(s => console.log(`   - ${s}`));
+      console.log(`\nAvailable servers:`);
+      allServers.forEach(s => console.log(`   - ${s}`));
+      return;
+    }
+    servers = specifiedServers;
+  } else if (interactive) {
+    // Interactive mode: let user select servers
+    servers = await selectServers(allServers);
+  } else {
+    // Default: use all servers
+    servers = allServers;
+  }
+
+  if (servers.length === 0) {
+    console.log('❌ No servers selected. Exiting.');
+    return;
+  }
+
+  console.log(`\n📦 Generating wrappers for ${servers.length} MCP server(s):\n`);
   servers.forEach(name => console.log(`   - ${name}`));
   console.log();
 
-  // Phase 1: Extract tools from all servers
+  // Phase 1: Extract tools from all servers and detect server types
   console.log(`🔬 Phase 1: Extracting tools from all MCP servers...\n`);
   const serverTools = new Map<string, MCPTool[]>();
   const serverConfigs = new Map<string, { command: string; args: string[]; env: Record<string, string> }>();
+  const serverTypes = new Map<string, 'typescript-local' | 'protocol'>();
 
   for (const serverName of servers) {
     const serverConfig = await loadMCPConfig(mcpJsonPath, serverName);
     serverConfigs.set(serverName, serverConfig);
+
+    // Detect server type
+    const serverType = await detectServerType(projectPath, serverName, serverConfig);
+    serverTypes.set(serverName, serverType);
 
     const cwd = process.cwd();
     process.chdir(projectPath);
@@ -426,7 +593,8 @@ async function generateAllFromProject(
     process.chdir(cwd);
 
     serverTools.set(serverName, tools);
-    console.log(`   ✅ ${serverName}: ${tools.length} tools`);
+    const typeLabel = serverType === 'typescript-local' ? '🔷 TypeScript' : '🔌 Protocol';
+    console.log(`   ✅ ${serverName}: ${tools.length} tools (${typeLabel})`);
   }
 
   // Phase 2: Detect duplicates
@@ -456,8 +624,14 @@ async function generateAllFromProject(
 
     const serverConfig = serverConfigs.get(serverName)!;
     const tools = serverTools.get(serverName)!;
+    const serverType = serverTypes.get(serverName)!;
     const wrapperName = serverToWrapper.get(serverName) || serverName;
-    const outputDir = path.join(projectPath, '.mcp-wrappers', wrapperName);
+
+    // TypeScript servers: put wrappers IN .mcp-server/dist for module resolution
+    // Protocol servers: put wrappers in .mcp-wrappers/
+    const outputDir = serverType === 'typescript-local'
+      ? path.join(projectPath, '.mcp-server', 'dist', 'wrappers')
+      : path.join(projectPath, '.mcp-wrappers', wrapperName);
 
     // Only generate wrapper if not already generated (deduplicate)
     if (!generatedWrappers.has(wrapperName)) {
@@ -470,7 +644,9 @@ async function generateAllFromProject(
         outputDir,
         wrapperName,
         serverConfig.env,
-        true // Skip config saving, we use .mcp.json directly
+        true, // Skip config saving, we use .mcp.json directly
+        serverType,
+        projectPath
       );
 
       process.chdir(cwd);
@@ -482,7 +658,7 @@ async function generateAllFromProject(
     if (createSkills) {
       console.log(`\n🎯 Creating Claude Code Skill wrapper...`);
       // Each server gets its own Skill (with unique description), but may reference shared wrapper
-      await generateSkillWrapper(projectPath, serverName, outputDir, tools, serverConfig.env);
+      await generateSkillWrapper(projectPath, serverName, outputDir, tools, serverConfig.env, serverType);
     }
   }
 
@@ -592,9 +768,10 @@ async function disableMCPServers(mcpJsonPath: string) {
     const settings = JSON.parse(settingsContent);
 
     // Disable MCPs
+    const serverNames = Object.keys(servers);
     settings.enabledMcpjsonServers = [];
     settings.enableAllProjectMcpServers = false;
-    settings.disabledMcpjsonServers = [];
+    settings.disabledMcpjsonServers = serverNames;
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`🔕 Disabled MCPs in settings.local.json`);
@@ -965,7 +1142,14 @@ function printRestartMessage() {
   console.log(`   MCPs are disabled but config is preserved for the executor.`);
 }
 
-async function generateSkillWrapper(projectPath: string, serverName: string, wrapperDir: string, tools: MCPTool[], env: Record<string, string> = {}) {
+async function generateSkillWrapper(
+  projectPath: string,
+  serverName: string,
+  wrapperDir: string,
+  tools: MCPTool[],
+  env: Record<string, string> = {},
+  serverType: 'typescript-local' | 'protocol' = 'protocol'
+) {
   const skillsDir = path.join(projectPath, '.claude', 'skills');
   await fs.mkdir(skillsDir, { recursive: true });
 
@@ -979,7 +1163,11 @@ async function generateSkillWrapper(projectPath: string, serverName: string, wra
   // Generate capability-focused description from actual tool metadata
   const description = await generateSkillDescription(wrapperDir, tools, env);
 
-  // Extract actual wrapper name from path (handles deduplicated wrappers)
+  // Determine import path based on server type
+  const importBasePath = serverType === 'typescript-local'
+    ? '../../.mcp-server/dist/wrappers'
+    : `../../.mcp-wrappers/${path.basename(wrapperDir)}`;
+
   const wrapperName = path.basename(wrapperDir);
 
   // Read categories from generated index to find example tools
@@ -1070,14 +1258,14 @@ const data = result.items || result.data || result.rows || result;
 
 **IMPORT EXAMPLE (copy this exactly):**
 \`\`\`typescript
-import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
+import { tool_name } from '${importBasePath}/category/tool_name.ts';
 \`\`\`
 
 ## Complete Template
 
 \`\`\`typescript
 // File: .claude/temp/script.ts
-import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
+import { tool_name} from '${importBasePath}/category/tool_name.ts';
 
 export default async function() {
   // Call tool - responses are automatically normalized
@@ -1118,7 +1306,7 @@ Full schemas: \`.mcp-wrappers/${wrapperName}/\`
 
 \`\`\`typescript
 // .claude/temp/example.ts
-import { ${exampleTool?.name || 'tool_name'} } from '../../.mcp-wrappers/${wrapperName}/${exampleCategory}/${exampleTool?.name || 'tool_name'}.ts';
+import { ${exampleTool?.name || 'tool_name'} } from '${importBasePath}/${exampleCategory}/${exampleTool?.name || 'tool_name'}.ts';
 
 export default async function() {
   // Responses are automatically normalized
@@ -1203,8 +1391,14 @@ ${bold}EXAMPLES:${reset}
   ${green}npx mcp-code-wrapper --restore .${reset}    ${dim}# Restore current directory${reset}
 
 ${bold}OPTIONS:${reset}
+  ${yellow}--all${reset}                               Generate all servers without prompting (default: interactive)
+  ${yellow}--servers <list>${reset}                    Generate specific servers (comma-separated)
   ${yellow}--no-disable${reset}                        Keep MCPs enabled after generating wrappers
   ${yellow}--help, -h${reset}                          Show this help message
+
+${bold}EXAMPLES WITH FLAGS:${reset}
+  ${green}npx mcp-code-wrapper . --servers mssql-main,chrome-devtools${reset}
+  ${green}npx mcp-code-wrapper . --all --no-disable${reset}
 
 ${bold}MORE INFO:${reset}
   ${blue}https://github.com/paddo/mcp-code-wrapper${reset}
@@ -1215,9 +1409,27 @@ ${bold}MORE INFO:${reset}
 async function main() {
   const args = process.argv.slice(2);
 
-  // Remove flags from args for path detection
-  const pathArgs = args.filter(arg => !arg.startsWith('--') && !arg.startsWith('-'));
-  const flags = args.filter(arg => arg.startsWith('--') || arg.startsWith('-'));
+  // Remove flags and their values from args for path detection
+  const flagsWithValues = ['--servers', '--from-mcp-json', '--server', '--env'];
+  const pathArgs: string[] = [];
+  const flags: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--') || arg.startsWith('-')) {
+      flags.push(arg);
+      // Skip next arg if this flag takes a value
+      if (flagsWithValues.includes(arg) && i + 1 < args.length) {
+        i++; // Skip the value
+      }
+    } else {
+      // Check if previous arg was a flag that takes a value
+      const prevArg = args[i - 1];
+      if (!prevArg || !flagsWithValues.includes(prevArg)) {
+        pathArgs.push(arg);
+      }
+    }
+  }
 
   // Help mode
   if (flags.includes('--help') || flags.includes('-h')) {
@@ -1235,6 +1447,14 @@ async function main() {
   // Check for disable flag (default is true)
   const disableMCPs = !flags.includes('--no-disable');
   const isGlobal = flags.includes('--global');
+  const interactive = !flags.includes('--all');
+
+  // Parse --servers flag
+  const serversIndex = args.indexOf('--servers');
+  let specifiedServers: string[] | undefined;
+  if (serversIndex !== -1 && args[serversIndex + 1]) {
+    specifiedServers = args[serversIndex + 1].split(',').map(s => s.trim());
+  }
 
   // Show help if no directory provided and not in global mode
   if (pathArgs.length === 0 && !isGlobal) {
@@ -1266,7 +1486,7 @@ async function main() {
     console.log(`✅ Found ${mcpJsonPath}\n`);
 
     // Generate in ~/.claude/.mcp-wrappers/
-    await generateAllFromProject(claudeDir, true, disableMCPs);
+    await generateAllFromProject(claudeDir, true, disableMCPs, interactive, specifiedServers);
     return;
   }
 
@@ -1277,7 +1497,7 @@ async function main() {
       const stat = await fs.stat(projectPath);
       if (stat.isDirectory()) {
         // Auto-discover and generate all MCPs
-        await generateAllFromProject(projectPath, true, disableMCPs);
+        await generateAllFromProject(projectPath, true, disableMCPs, interactive, specifiedServers);
         return;
       }
     } catch {

@@ -66,19 +66,31 @@ pnpm run generate /path/to/project
 
 ### Usage
 
-**Project Mode** (converts all MCPs in a project):
+**Project Mode** (converts MCPs in a project):
 
 ```bash
-npx mcp-code-wrapper .                # Current directory (explicit)
-npx mcp-code-wrapper /path/to/project # Specific directory
+npx mcp-code-wrapper .                # Current directory (interactive selection)
+npx mcp-code-wrapper /path/to/project # Specific directory (interactive selection)
+npx mcp-code-wrapper . --all          # Generate all servers without prompting
+npx mcp-code-wrapper . --servers mssql-main,chrome-devtools  # Specific servers
 ```
+
+**Interactive mode** (default):
+- Shows list of available MCP servers
+- Select which servers to generate wrappers for
+- Useful when you only want specific MCPs
+
+**All mode** (`--all` flag):
+- Generates wrappers for all MCPs without prompting
+- Useful for automation/scripts
 
 What it does:
 1. Discovers all MCP servers in `.mcp.json`
-2. Generates code wrappers in `.mcp-wrappers/`
-3. Creates Claude Code Skills for each MCP
-4. Disables MCPs (keeps config for executor)
-5. Updates `.gitignore`
+2. Prompts for server selection (unless `--all` flag)
+3. Generates code wrappers in `.mcp-wrappers/`
+4. Creates Claude Code Skills for each MCP
+5. Disables MCPs (keeps config for executor)
+6. Updates `.gitignore`
 
 **Global Mode** (explicit flag required):
 
@@ -343,6 +355,29 @@ npx mcp-code-wrapper /path/to/project --no-disable
 ```
 
 This generates wrappers but leaves MCPs active in both `.mcp.json` and `.claude/settings.local.json`.
+
+### Generate All Without Prompting
+
+To skip interactive server selection and generate all at once:
+
+```bash
+npx mcp-code-wrapper /path/to/project --all
+```
+
+This is useful for automation, CI/CD, or when you always want all MCPs wrapped.
+
+### Generate Specific Servers
+
+To generate wrappers for specific servers without prompting:
+
+```bash
+npx mcp-code-wrapper /path/to/project --servers mssql-main,chrome-devtools
+```
+
+This is useful when you:
+- Only want specific MCPs wrapped
+- Are automating wrapper generation in scripts
+- Want to regenerate just one server without interactive prompts
 
 ### Generate for Specific MCP
 

@@ -265,6 +265,20 @@ function createWrapperProxy(client: MCPClient) {
 }
 
 /**
+ * Detect if this is a TypeScript local server (wrappers in .mcp-server/dist/wrappers/)
+ */
+async function isTypescriptLocal(serverName: string): Promise<boolean> {
+  try {
+    const { stat } = await import('fs/promises');
+    const wrappersPath = join(process.cwd(), '.mcp-server', 'dist', 'wrappers');
+    await stat(wrappersPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Execute user code with MCP client active
  */
 async function executeCode(serverName: string, codeFile: string) {
@@ -272,20 +286,31 @@ async function executeCode(serverName: string, codeFile: string) {
 
   // Load server config
   const config = await loadServerConfig(serverName);
-  console.log(`📡 Spawning MCP server: ${config.command} ${config.args.join(' ')}\n`);
 
-  // Start MCP client
-  const client = new MCPClient();
-  await client.start(config.command, config.args, config.env);
+  // Check if this is a TypeScript local server
+  const isLocal = await isTypescriptLocal(serverName);
 
-  console.log(`✅ MCP client ready\n`);
+  let client: MCPClient | null = null;
 
-  // Create global proxy for wrapper functions
-  const wrapperProxy = createWrapperProxy(client);
+  if (isLocal) {
+    // TypeScript local: just set env vars, no MCP subprocess needed!
+    console.log(`⚡ TypeScript local mode: Direct imports\n`);
+    Object.assign(process.env, config.env);
+  } else {
+    // Protocol server: spawn MCP subprocess
+    console.log(`📡 Spawning MCP server: ${config.command} ${config.args.join(' ')}\n`);
+    client = new MCPClient();
+    await client.start(config.command, config.args, config.env);
+  }
 
-  // Make the proxy available globally for imports
-  (global as any).__mcpClient = client;
-  (global as any).__mcpWrapper = wrapperProxy;
+  console.log(`✅ MCP executor ready\n`);
+
+  // Create global proxy for wrapper functions (only for protocol servers)
+  if (client) {
+    const wrapperProxy = createWrapperProxy(client);
+    (global as any).__mcpClient = client;
+    (global as any).__mcpWrapper = wrapperProxy;
+  }
 
   // Read and execute user code
   console.log(`📝 Executing: ${codeFile}\n`);
@@ -315,7 +340,9 @@ async function executeCode(serverName: string, codeFile: string) {
     }
   } finally {
     console.log('\n' + '='.repeat(70));
-    await client.stop();
+    if (client) {
+      await client.stop();
+    }
   }
 }
 

@@ -10,4 +10,4 @@
  */
 
 // Import and run the generator
-import './generator-universal.js';
+import './generator.js';
