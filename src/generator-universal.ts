@@ -964,10 +964,12 @@ const result = await tool_name({ param: 'value' });`;
   // Create SKILL.md with YAML frontmatter
   const skillContent = `---
 name: ${skillName}
-description: ${description}
+description: "CRITICAL: Import path must be ../../.mcp-wrappers/ (TWO dots, .ts extension). File location: .claude/temp/. ${description}"
 ---
 
 # ${serverName} MCP Wrapper
+
+**CRITICAL: Use import path \`../../.mcp-wrappers/\` (TWO dots, not one!)**
 
 ## Template (File: .claude/temp/script.ts)
 
