@@ -1046,7 +1046,9 @@ async function generateAllFromProject(
   }
 
   // Write runtime executor from embedded template
-  const executorDest = path.join(projectPath, '.mcp-wrappers', '.runtime-executor.ts');
+  const wrappersDir = path.join(projectPath, '.mcp-wrappers');
+  await fs.mkdir(wrappersDir, { recursive: true });
+  const executorDest = path.join(wrappersDir, '.runtime-executor.ts');
   await fs.writeFile(executorDest, RUNTIME_EXECUTOR_TEMPLATE);
   console.log(`\n📄 Created .runtime-executor.ts in .mcp-wrappers/`);
 
@@ -1858,8 +1860,14 @@ async function main() {
         await generateAllFromProject(projectPath, true, disableMCPs, interactive, specifiedServers);
         return;
       }
-    } catch {
-      // Not a directory, continue with other parsing
+    } catch (error: any) {
+      // Check if it's just a "not a directory" error
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+        // Not a directory, continue with other parsing
+      } else {
+        // Actual error in generateAllFromProject, re-throw
+        throw error;
+      }
     }
   }
 
