@@ -955,16 +955,19 @@ async function main() {
 
     // Get command/args (everything before --env)
     const beforeEnv = args.slice(0, envIndex);
-    command = beforeEnv[0] || 'npx';
+    command = beforeEnv[0];
     commandArgs = beforeEnv.slice(1);
 
-    if (commandArgs.length === 0) {
-      commandArgs = ['-y', 'chrome-devtools-mcp@latest'];
+    if (!command || commandArgs.length === 0) {
+      throw new Error('Must provide command and args when using --env flag');
     }
   } else {
     // Traditional CLI: pnpm run generate <command> <args...>
-    command = args[0] || 'npx';
-    commandArgs = args[1] ? args.slice(1) : ['-y', 'chrome-devtools-mcp@latest'];
+    if (!args[0] || !args[1]) {
+      throw new Error('Must provide MCP server command and args (e.g., node /path/to/server.js)');
+    }
+    command = args[0];
+    commandArgs = args.slice(1);
   }
 
   // Set env vars for the spawned process

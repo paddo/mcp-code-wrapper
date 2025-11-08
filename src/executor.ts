@@ -62,13 +62,7 @@ export class MCPClient extends EventEmitter {
 
       console.log(`📡 Using MCP server: ${server}`);
     } catch (e) {
-      // Fallback to Chrome DevTools if no config found
-      console.warn('⚠️  No .mcp.json found, using default Chrome DevTools MCP');
-      this.config = {
-        command: 'npx',
-        args: ['-y', 'chrome-devtools-mcp@latest']
-      };
-      this.env = {};
+      throw new Error('No .mcp.json found. Please run from a directory with .mcp.json configuration.');
     }
 
     // Start MCP server with config
