@@ -485,15 +485,16 @@ function categorizeTools(tools: MCPTool[]): Record<string, MCPTool[]> {
   return categories;
 }
 
-function extractParameters(tool: MCPTool): { name: string; type: string; required: boolean }[] {
+function extractParameters(tool: MCPTool): { name: string; schema: any; required: boolean; description?: string }[] {
   if (!tool.inputSchema?.properties) return [];
 
   const required = new Set(tool.inputSchema.required || []);
 
   return Object.entries(tool.inputSchema.properties).map(([name, schema]) => ({
     name,
-    type: (schema as any).type || 'any',
+    schema: schema,
     required: required.has(name),
+    description: (schema as any).description,
   }));
 }
 
@@ -506,13 +507,21 @@ async function generateToolFile(
 ): Promise<string> {
   const params = extractParameters(tool);
 
-  // Generate parameter interface
+  // Generate parameter interface with improved type mapping
   const paramInterface = params.length > 0 ? `{
-${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.type)};`).join('\n')}
+${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.schema)};`).join('\n')}
 }` : 'Record<string, never>';
 
   // Escape description for safe embedding in strings
   const description = (tool.description || tool.name).replace(/'/g, "\\'").replace(/\n/g, ' ');
+
+  // Generate JSDoc parameter documentation
+  const paramDocs = params.length > 0 ? '\n *\n' + params.map(p => {
+    const desc = p.description ? ` - ${p.description.replace(/\n/g, ' ')}` : '';
+    const typeInfo = p.schema?.enum ? ` (${p.schema.enum.join(', ')})` : '';
+    const defaultVal = p.schema?.default !== undefined ? ` Default: ${JSON.stringify(p.schema.default)}` : '';
+    return ` * @param ${p.name}${desc}${typeInfo}${defaultVal}`;
+  }).join('\n') : '';
 
   // Capitalize first letter of tool name for class name
   const className = tool.name.split('_').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
@@ -524,7 +533,7 @@ ${params.map(p => `  ${p.name}${p.required ? '' : '?'}: ${mapJsonSchemaType(p.ty
  * ${tool.description || tool.name}
  *
  * @category ${category}
- * @source ${serverName} (Direct TypeScript Import)
+ * @source ${serverName} (Direct TypeScript Import)${paramDocs}
  *
  * @returns Response format: { success?, message?, items/data/rows?: [...] }
  *          Extract data: \`result.items || result.data || result.rows || result\`
@@ -567,7 +576,7 @@ export const metadata = {
  * ${tool.description || tool.name}
  *
  * @category ${category}
- * @source ${serverName}
+ * @source ${serverName}${paramDocs}
  *
  * @returns Response format: { success?, message?, items/data/rows?: [...] }
  *          Extract data: \`result.items || result.data || result.rows || result\`
@@ -600,14 +609,67 @@ export const metadata = {
   }
 }
 
-function mapJsonSchemaType(jsonType: string): string {
-  switch (jsonType) {
+function mapJsonSchemaType(schema: any): string {
+  // If passed a simple string (backward compatibility)
+  if (typeof schema === 'string') {
+    switch (schema) {
+      case 'string': return 'string';
+      case 'number': return 'number';
+      case 'integer': return 'number';
+      case 'boolean': return 'boolean';
+      case 'array': return 'any[]';
+      case 'object': return 'Record<string, any>';
+      default: return 'any';
+    }
+  }
+
+  // Handle null/undefined
+  if (!schema || typeof schema !== 'object') {
+    return 'any';
+  }
+
+  // Handle enums - create union types
+  if (schema.enum && Array.isArray(schema.enum)) {
+    return schema.enum.map((v: any) => JSON.stringify(v)).join(' | ');
+  }
+
+  // Handle unions (oneOf, anyOf)
+  if (schema.oneOf && Array.isArray(schema.oneOf)) {
+    return schema.oneOf.map((s: any) => mapJsonSchemaType(s)).join(' | ');
+  }
+  if (schema.anyOf && Array.isArray(schema.anyOf)) {
+    return schema.anyOf.map((s: any) => mapJsonSchemaType(s)).join(' | ');
+  }
+
+  // Handle arrays with item types
+  if (schema.type === 'array') {
+    if (schema.items) {
+      return `${mapJsonSchemaType(schema.items)}[]`;
+    }
+    return 'any[]';
+  }
+
+  // Handle objects with additional properties
+  if (schema.type === 'object') {
+    if (schema.properties && Object.keys(schema.properties).length > 0) {
+      // For objects with defined properties, we could generate an inline type
+      // but for simplicity, we'll use Record for now
+      return 'Record<string, any>';
+    }
+    if (schema.additionalProperties) {
+      const valueType = mapJsonSchemaType(schema.additionalProperties);
+      return `Record<string, ${valueType}>`;
+    }
+    return 'Record<string, any>';
+  }
+
+  // Handle basic types
+  switch (schema.type) {
     case 'string': return 'string';
     case 'number': return 'number';
     case 'integer': return 'number';
     case 'boolean': return 'boolean';
-    case 'array': return 'any[]';
-    case 'object': return 'Record<string, any>';
+    case 'null': return 'null';
     default: return 'any';
   }
 }
