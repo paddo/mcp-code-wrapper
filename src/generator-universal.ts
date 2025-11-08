@@ -912,6 +912,9 @@ async function generateSkillWrapper(projectPath: string, serverName: string, wra
 
   const skillName = `mcp-${serverName}`;
   const skillDir = path.join(skillsDir, skillName);
+
+  // Clean and recreate skill directory to ensure fresh install
+  await fs.rm(skillDir, { recursive: true, force: true });
   await fs.mkdir(skillDir, { recursive: true });
 
   // Generate capability-focused description from actual tool metadata
