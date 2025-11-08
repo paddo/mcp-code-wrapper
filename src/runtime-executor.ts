@@ -132,7 +132,33 @@ class MCPClient {
 
   async stop() {
     if (this.process) {
-      this.process.kill();
+      // Clear pending requests
+      this.pendingRequests.clear();
+
+      // Remove all listeners to prevent event loop from hanging
+      this.process.stdout.removeAllListeners();
+      this.process.stderr.removeAllListeners();
+      this.process.removeAllListeners();
+
+      // Kill the process
+      this.process.kill('SIGTERM');
+
+      // Force kill after 1 second if still running
+      await new Promise(resolve => {
+        const forceKillTimeout = setTimeout(() => {
+          if (this.process && !this.process.killed) {
+            this.process.kill('SIGKILL');
+          }
+          resolve(undefined);
+        }, 1000);
+
+        this.process.once('exit', () => {
+          clearTimeout(forceKillTimeout);
+          resolve(undefined);
+        });
+      });
+
+      this.process = null;
     }
   }
 }
