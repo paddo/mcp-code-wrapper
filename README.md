@@ -180,6 +180,7 @@ Output:
 💾 Created backup: .mcp.json.backup
 🔕 Disabled 2 MCP servers
    MCPs stay in .mcp.json for executor reference
+   Restore with: npx mcp-code-wrapper --restore
 
 ⚠️  IMPORTANT: Restart Claude Code to load new Skills
    Run: claude -c
@@ -289,11 +290,39 @@ npx mcp-code-wrapper --global
 
 ### Restore Original MCPs
 
+Remove all generated wrappers and Skills, restore original .mcp.json:
+
+```bash
+# Restore current directory
+npx mcp-code-wrapper --restore
+
+# Restore specific project
+npx mcp-code-wrapper --restore /path/to/project
+```
+
+This will:
+- Remove `.mcp-wrappers/` directory
+- Remove all `mcp-*` Skills from `.claude/skills/`
+- Restore `.mcp.json` from backup
+- Remove backup file
+
+**Manual restore (alternative):**
 ```bash
 cd /path/to/project
 mv .mcp.json.backup .mcp.json
+rm -rf .mcp-wrappers .claude/skills/mcp-*
 claude -c
 ```
+
+### Keep MCPs Enabled
+
+By default, MCPs are disabled after wrapper generation. To keep them enabled:
+
+```bash
+npx mcp-code-wrapper /path/to/project --no-disable
+```
+
+This generates wrappers but leaves MCPs active (no backup created).
 
 ### Generate for Specific MCP
 

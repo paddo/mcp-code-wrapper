@@ -345,7 +345,11 @@ async function discoverGlobalMCPConfig(): Promise<string | null> {
   return null;
 }
 
-async function generateAllFromProject(projectPath: string, createSkills: boolean = false) {
+async function generateAllFromProject(
+  projectPath: string,
+  createSkills: boolean = false,
+  disableMCPs: boolean = true
+) {
   console.log(`\n🔍 Discovering MCP servers in ${projectPath}\n`);
 
   const mcpJsonPath = await discoverMCPConfig(projectPath);
@@ -457,8 +461,10 @@ async function generateAllFromProject(projectPath: string, createSkills: boolean
   await updateGitignore(projectPath);
 
   // Disable MCPs (keeps them in .mcp.json for executor)
-  console.log();
-  await disableMCPServers(mcpJsonPath);
+  if (disableMCPs) {
+    console.log();
+    await disableMCPServers(mcpJsonPath);
+  }
 
   // Show restart message
   console.log();
@@ -511,7 +517,55 @@ async function disableMCPServers(mcpJsonPath: string) {
   await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
   console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers`);
   console.log(`   MCPs stay in .mcp.json for executor reference`);
-  console.log(`   Restore with: mv ${path.basename(backupPath)} ${path.basename(mcpJsonPath)}`);
+  console.log(`   Restore with: npx mcp-code-wrapper --restore`);
+}
+
+/**
+ * Restore project to original state by removing wrappers and re-enabling MCPs
+ */
+async function restoreProject(projectPath: string) {
+  console.log(`\n🔄 Restoring project: ${projectPath}\n`);
+
+  // Remove .mcp-wrappers directory
+  const wrappersPath = path.join(projectPath, '.mcp-wrappers');
+  try {
+    await fs.rm(wrappersPath, { recursive: true, force: true });
+    console.log(`🗑️  Removed .mcp-wrappers/`);
+  } catch (e) {
+    console.log(`⚠️  No .mcp-wrappers/ found`);
+  }
+
+  // Remove generated Skills
+  const skillsPath = path.join(projectPath, '.claude', 'skills');
+  try {
+    const skills = await fs.readdir(skillsPath);
+    const mcpSkills = skills.filter(s => s.startsWith('mcp-'));
+
+    for (const skill of mcpSkills) {
+      await fs.rm(path.join(skillsPath, skill), { recursive: true, force: true });
+      console.log(`🗑️  Removed skill: ${skill}`);
+    }
+  } catch (e) {
+    console.log(`⚠️  No Skills found to remove`);
+  }
+
+  // Restore .mcp.json from backup
+  const mcpJsonPath = path.join(projectPath, '.mcp.json');
+  const backupPath = path.join(projectPath, '.mcp.json.backup');
+
+  try {
+    const backupContent = await fs.readFile(backupPath, 'utf-8');
+    await fs.writeFile(mcpJsonPath, backupContent);
+    await fs.rm(backupPath);
+    console.log(`✅ Restored .mcp.json from backup`);
+    console.log(`🗑️  Removed backup file`);
+  } catch (e) {
+    console.log(`⚠️  No .mcp.json.backup found`);
+  }
+
+  console.log(`\n✅ Project restored successfully`);
+  console.log(`⚠️  IMPORTANT: Restart Claude Code to remove Skills`);
+  console.log(`   Run: claude -c\n`);
 }
 
 /**
@@ -876,11 +930,20 @@ ${exampleCode}
 async function main() {
   const args = process.argv.slice(2);
 
-  // Check for flags
-  const isGlobal = args.includes('--global') || args.length === 0;
-
   // Remove flags from args for path detection
   const pathArgs = args.filter(arg => !arg.startsWith('--'));
+  const flags = args.filter(arg => arg.startsWith('--'));
+
+  // Restore mode
+  if (flags.includes('--restore')) {
+    const projectPath = pathArgs.length > 0 ? path.resolve(pathArgs[0]) : process.cwd();
+    await restoreProject(projectPath);
+    return;
+  }
+
+  // Check for disable flag (default is true)
+  const disableMCPs = !flags.includes('--no-disable');
+  const isGlobal = flags.includes('--global') || args.length === 0;
 
   // Global mode: no args or --global flag
   if (isGlobal && pathArgs.length === 0) {
@@ -906,7 +969,7 @@ async function main() {
     console.log(`✅ Found ${mcpJsonPath}\n`);
 
     // Generate in ~/.claude/.mcp-wrappers/
-    await generateAllFromProject(claudeDir, true);
+    await generateAllFromProject(claudeDir, true, disableMCPs);
     return;
   }
 
@@ -917,7 +980,7 @@ async function main() {
       const stat = await fs.stat(projectPath);
       if (stat.isDirectory()) {
         // Auto-discover and generate all MCPs
-        await generateAllFromProject(projectPath, true);
+        await generateAllFromProject(projectPath, true, disableMCPs);
         return;
       }
     } catch {
