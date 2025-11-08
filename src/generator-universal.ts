@@ -1057,15 +1057,14 @@ import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name
 import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
+  // Responses are automatically normalized by the runtime executor
   const result = await tool_name({ param: 'value' });
-  const text = result.content?.[0]?.text;
-  const parsed = text ? JSON.parse(text) : result;
 
   // Inspect structure first
-  console.log('Response:', JSON.stringify(parsed, null, 2));
+  console.log('Response:', JSON.stringify(result, null, 2));
 
-  // Extract data (common: .items, .data, .rows, or direct)
-  const data = parsed.items || parsed.data || parsed.rows || parsed;
+  // Extract data (common patterns: .items, .data, .rows, or use result directly)
+  const data = result.items || result.data || result.rows || result;
   return data;
 }
 \`\`\`
@@ -1092,11 +1091,10 @@ Full schemas: \`.mcp-wrappers/${wrapperName}/\`
 import { ${exampleTool?.name || 'tool_name'} } from '../../.mcp-wrappers/${wrapperName}/${exampleCategory}/${exampleTool?.name || 'tool_name'}.ts';
 
 export default async function() {
+  // Responses are automatically normalized
   const result = await ${exampleTool?.name || 'tool_name'}(${exampleCode.match(/await.*?\((.*?)\)/)?.[1] || '{}'});
-  const text = result.content?.[0]?.text;
-  const data = text ? JSON.parse(text) : result;
-  console.log(JSON.stringify(data, null, 2));
-  return data;
+  console.log(JSON.stringify(result, null, 2));
+  return result.items || result.data || result.rows || result;
 }
 \`\`\`
 
@@ -1114,16 +1112,16 @@ ${generateCapabilityHints(tools)}
 - **Start small:** Test with minimal data before scaling up
 - **Batch operations:** Process multiple items in one call when possible
 
-**Response parsing:**
+**Response handling:**
 \`\`\`typescript
-const text = result.content?.[0]?.text;
-const parsed = text ? JSON.parse(text) : result;
+// ✅ Responses are automatically normalized (no manual parsing needed!)
+const result = await tool_name({ param: 'value' });
 
 // Inspect structure first
-console.log('Response:', JSON.stringify(parsed, null, 2));
+console.log('Response:', JSON.stringify(result, null, 2));
 
-// Extract (common: .items, .data, .rows, or direct)
-const data = parsed.items || parsed.data || parsed.rows || parsed;
+// Extract data (common patterns: .items, .data, .rows, or use result directly)
+const data = result.items || result.data || result.rows || result;
 \`\`\`
 
 ## Troubleshooting
@@ -1134,7 +1132,8 @@ const data = parsed.items || parsed.data || parsed.rows || parsed;
 
 **Wrong data structure**
 - Log with \`console.log(JSON.stringify(result, null, 2))\`
-- Try \`parsed.data || parsed.items || parsed.rows || parsed\`
+- Try \`result.data || result.items || result.rows || result\`
+- Responses are automatically normalized - no manual \`content[0].text\` parsing needed
 
 **Must call through executor**
 - Run: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./script.ts\`

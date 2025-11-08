@@ -127,7 +127,56 @@ class MCPClient {
       name,
       arguments: args,
     });
-    return result;
+    return this.normalizeResponse(result);
+  }
+
+  /**
+   * Normalize MCP responses to handle common unusual formats
+   */
+  private normalizeResponse(result: any): any {
+    // If result has content array with text, parse it first
+    if (result?.content?.[0]?.text) {
+      try {
+        const parsed = JSON.parse(result.content[0].text);
+        return this.normalizeData(parsed);
+      } catch {
+        return result;
+      }
+    }
+
+    return this.normalizeData(result);
+  }
+
+  /**
+   * Recursively normalize data structures
+   */
+  private normalizeData(data: any): any {
+    if (Array.isArray(data)) {
+      return data.map(item => this.normalizeData(item));
+    }
+
+    if (data && typeof data === 'object') {
+      // Handle { "": value } pattern - unwrap to just value
+      const keys = Object.keys(data);
+      if (keys.length === 1 && keys[0] === '') {
+        const value = data[''];
+        // If value is a primitive, return it directly
+        if (typeof value !== 'object') {
+          return value;
+        }
+        // If value is an object, normalize it
+        return this.normalizeData(value);
+      }
+
+      // Otherwise normalize each property
+      const normalized: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        normalized[key] = this.normalizeData(value);
+      }
+      return normalized;
+    }
+
+    return data;
   }
 
   async stop() {

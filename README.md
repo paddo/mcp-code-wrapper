@@ -273,6 +273,7 @@ const result = await read_data({ query: 'SELECT * FROM users' });
 ✅ **Token efficient**: 96%+ context savings
 ✅ **Git-safe**: Auto-updates `.gitignore` for generated code
 ✅ **No secrets committed**: Env vars stay in `.mcp.json` (not tracked)
+✅ **Auto-normalized responses**: Runtime executor automatically unwraps MCP response formats
 
 ## Use Cases
 
