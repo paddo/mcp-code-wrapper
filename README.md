@@ -5,6 +5,8 @@
 [![GitHub issues](https://img.shields.io/github/issues/paddo/mcp-code-wrapper)](https://github.com/paddo/mcp-code-wrapper/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+> **⚠️ EXPERIMENTAL**: This project is in active development and not production-ready. APIs may change without notice. Use at your own risk. Contributions and feedback welcome!
+
 **Transform MCP tool definitions into progressive discovery APIs (96% context savings)**
 
 Generate code execution wrappers for Model Context Protocol servers with automatic progressive tool discovery. Reduces context usage by up to 96% while maintaining full MCP functionality.
