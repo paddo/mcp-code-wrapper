@@ -952,11 +952,11 @@ async function generateSkillWrapper(projectPath: string, serverName: string, wra
       exampleParams = `{ ${params[0]}: 'value' }`;
     }
 
-    exampleCode = `import { ${toolName} } from './.mcp-wrappers/${wrapperName}/${exampleCategory}/${toolName}.js';
+    exampleCode = `import { ${toolName} } from '../../.mcp-wrappers/${wrapperName}/${exampleCategory}/${toolName}.ts';
 
 const result = await ${toolName}(${exampleParams});`;
   } else {
-    exampleCode = `import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+    exampleCode = `import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 const result = await tool_name({ param: 'value' });`;
   }
@@ -975,25 +975,35 @@ This skill provides access to the ${serverName} MCP server through a code execut
 
 **COPY-PASTE THIS TEMPLATE** when writing code:
 
-\`\`\`typescript
-import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+\`\`\`javascript
+// .claude/temp/my-script.js
+import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
-  // Your code here
   const result = await tool_name({ param: 'value' });
 
-  console.log('Result:', result);
+  // Parse MCP response envelope
+  const text = result.content?.[0]?.text;
+  const parsed = text ? JSON.parse(text) : result;
 
-  // Optionally return data
-  return result;
+  // Access data (structure varies by tool - check with console.log first!)
+  const data = parsed.data || parsed.items || parsed.rows || parsed;
+
+  console.log('Result:', JSON.stringify(data, null, 2));
+  return data;
 }
 \`\`\`
 
-**Critical:** Code MUST be wrapped in \`export default async function()\` - top-level await is not supported.
+**Critical:**
+- Code MUST be wrapped in \`export default async function()\` - top-level await is not supported
+- Import paths use \`../../\` because scripts are in \`.claude/temp/\` (2 levels up to project root)
 
 ## File Location
 
 - **Create scripts in:** \`.claude/temp/\` (this directory is safe for temporary files)
+- **Script format:** Use \`.js\` extension - simpler and more token-efficient than TypeScript
+- **Import path:** Always use \`../../.mcp-wrappers/\` from \`.claude/temp/\`
+- **Import extension:** Use \`.ts\` when importing wrappers (wrapper files are TypeScript)
 - **Do NOT** create files in the main project directory
 - **Clean up** temporary scripts after execution
 
@@ -1009,16 +1019,21 @@ The API is available in: \`.mcp-wrappers/${wrapperName}/\`
 
 ### Step 2: Write Your Code
 
-Create a TypeScript file in \`.claude/temp/\`:
+Create a JavaScript file in \`.claude/temp/\`:
 
-\`\`\`typescript
-// .claude/temp/my-query.ts
-${exampleCode}
+\`\`\`javascript
+// .claude/temp/my-query.js
+import { ${exampleTool?.name || 'tool_name'} } from '../../.mcp-wrappers/${wrapperName}/${exampleCategory}/${exampleTool?.name || 'tool_name'}.ts';
 
 export default async function() {
   const result = await ${exampleTool?.name || 'tool_name'}(${exampleCode.match(/await.*?\((.*?)\)/)?.[1] || '{}'});
-  console.log('Result:', result);
-  return result;
+
+  // Parse response
+  const text = result.content?.[0]?.text;
+  const data = text ? JSON.parse(text) : result;
+
+  console.log('Result:', JSON.stringify(data, null, 2));
+  return data;
 }
 \`\`\`
 
@@ -1027,7 +1042,7 @@ export default async function() {
 **Server name:** \`${serverName}\` (use this exact name, not \`${wrapperName}\`)
 
 \`\`\`bash
-npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query.ts
+npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query.js
 \`\`\`
 
 ### Step 4: Clean Up
@@ -1035,15 +1050,18 @@ npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/my-query
 After successful execution, delete the temporary script:
 
 \`\`\`bash
-rm ./.claude/temp/my-query.ts
+rm ./.claude/temp/my-query.js
 \`\`\`
 
 ## Important Notes
 
 - **Server Name:** Always use \`${serverName}\` when executing (first argument to runtime-executor.ts)
+- **File Format:** Use \`.js\` extension for your scripts (JavaScript is simpler and more token-efficient)
+- **Import Paths:** Always use \`../../.mcp-wrappers/\` from \`.claude/temp/\` with \`.ts\` extension
+- **Import Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
+- **Code Pattern:** Must use \`export default async function()\` wrapper (top-level await not supported)
+- **Response Parsing:** Always parse MCP envelope: \`result.content?.[0]?.text\`
 - **Wrapper Functions:** Must be called through the MCP executor (do NOT run directly)
-- **File Location:** Always use \`.claude/temp/\` for temporary scripts
-- **Code Pattern:** Must use \`export default async function()\` wrapper
 - **Cleanup:** Delete temporary files after use
 
 ## Discovering Available Tools
@@ -1076,45 +1094,129 @@ export const metadata = {
 ## Common Patterns
 
 **Single tool call:**
-\`\`\`typescript
-import { tool_name } from './.mcp-wrappers/${wrapperName}/category/tool_name.js';
+\`\`\`javascript
+import { tool_name } from '../../.mcp-wrappers/${wrapperName}/category/tool_name.ts';
 
 export default async function() {
   const result = await tool_name({ param1: 'value' });
-  console.log(result);
+
+  // Parse response
+  const text = result.content?.[0]?.text;
+  const data = text ? JSON.parse(text) : result;
+
+  console.log(JSON.stringify(data, null, 2));
+  return data;
 }
 \`\`\`
 
-**Parsing MCP responses:**
-\`\`\`typescript
+**Inspecting unknown response structures:**
+\`\`\`javascript
 export default async function() {
   const result = await tool_name({ param: 'value' });
 
-  // MCP tools return: { content: [{ type: 'text', text: '...' }] }
-  const data = result.content?.[0]?.text
-    ? JSON.parse(result.content[0].text)
-    : result;
+  // Step 1: Log raw result to understand structure
+  console.log('Raw MCP result:', JSON.stringify(result, null, 2));
 
-  console.log('Parsed data:', data);
+  // Step 2: Extract text from MCP envelope
+  const text = result.content?.[0]?.text;
+  console.log('Extracted text:', text);
+
+  // Step 3: Parse JSON
+  const parsed = text ? JSON.parse(text) : result;
+  console.log('Parsed JSON:', JSON.stringify(parsed, null, 2));
+
+  // Step 4: Access data (structure varies by tool!)
+  const data = parsed.data || parsed.items || parsed.rows || parsed;
+  console.log('Final data:', JSON.stringify(data, null, 2));
+
   return data;
 }
 \`\`\`
 
 **Multiple operations:**
-\`\`\`typescript
-import { tool_one } from './.mcp-wrappers/${wrapperName}/category/tool_one.js';
-import { tool_two } from './.mcp-wrappers/${wrapperName}/category/tool_two.js';
+\`\`\`javascript
+import { tool_one } from '../../.mcp-wrappers/${wrapperName}/category/tool_one.ts';
+import { tool_two } from '../../.mcp-wrappers/${wrapperName}/category/tool_two.ts';
 
 export default async function() {
   const first = await tool_one({ param: 'value' });
   const second = await tool_two({ param: 'other' });
 
-  console.log('First:', first);
-  console.log('Second:', second);
+  // Parse both responses
+  const firstData = first.content?.[0]?.text ? JSON.parse(first.content[0].text) : first;
+  const secondData = second.content?.[0]?.text ? JSON.parse(second.content[0].text) : second;
 
-  return { first, second };
+  console.log('First:', JSON.stringify(firstData, null, 2));
+  console.log('Second:', JSON.stringify(secondData, null, 2));
+
+  return { first: firstData, second: secondData };
 }
 \`\`\`
+
+## Common Response Patterns
+
+Different MCP tools return different data structures. Always inspect with \`console.log\` first!
+
+**List/Query Results:**
+- \`{ items: [...] }\` - Collections (list_table, list_users, etc.)
+- \`{ data: [...], recordCount: N }\` - Query results (read_data, SELECT queries, etc.)
+- \`{ rows: [...] }\` - Database rows
+- \`{ success: true, data: [...] }\` - Wrapped data responses
+- \`[...]\` - Direct arrays
+
+**Single Records:**
+- \`{ record: {...} }\` - Single item queries
+- \`{ success: true, result: {...} }\` - Wrapped single results
+- \`{...}\` - Direct objects
+
+**Operation Results:**
+- \`{ success: boolean, message: string }\` - Status responses
+- \`{ affected: N }\` - Mutation results (UPDATE, DELETE, etc.)
+- \`{ created: {...}, id: ... }\` - Creation results
+
+**Access pattern:**
+\`\`\`javascript
+// Parse the MCP envelope
+const parsed = result.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
+
+// Try common patterns
+const data = parsed.data      // Query results
+         || parsed.items      // Collections
+         || parsed.rows       // Database rows
+         || parsed.result     // Single results
+         || parsed.record     // Single records
+         || parsed;           // Direct data
+\`\`\`
+
+## Troubleshooting
+
+**Error: "Cannot find module '../../.mcp-wrappers/...'"**
+- **Cause:** Incorrect import path or file extension
+- **Fix:** Ensure script is in \`.claude/temp/\`, path starts with \`../../\`, and uses \`.ts\` extension
+- **Example:** \`import { tool } from '../../.mcp-wrappers/${wrapperName}/category/tool.ts';\`
+
+**Error: "undefined is not iterable" or "Cannot read property of undefined"**
+- **Cause:** Response structure differs from expected
+- **Fix:** Use the inspection pattern to log the actual structure:
+  \`\`\`javascript
+  console.log('Result:', JSON.stringify(result, null, 2));
+  const parsed = result.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
+  console.log('Parsed:', JSON.stringify(parsed, null, 2));
+  \`\`\`
+
+**Empty results when data exists:**
+- **Cause:** Accessing wrong property (\`data\` vs \`items\` vs \`rows\`)
+- **Fix:** Inspect the parsed object to find the correct property name
+- **Pattern:** \`const data = parsed.data || parsed.items || parsed.rows || parsed;\`
+
+**Error: "This function must be called through the MCP executor"**
+- **Cause:** Trying to run wrapper functions directly
+- **Fix:** Always execute via: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./script.js\`
+
+**Execution hangs or times out:**
+- **Cause:** MCP server not responding or incorrect server name
+- **Fix:** Verify server name matches exactly: \`${serverName}\`
+- **Check:** Ensure \`.mcp.json\` has correct server configuration
 `;
   await fs.writeFile(
     path.join(skillDir, 'SKILL.md'),
