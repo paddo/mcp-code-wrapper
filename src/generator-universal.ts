@@ -1061,18 +1061,22 @@ export default async function() {
 Run: \`npx tsx .mcp-wrappers/.runtime-executor.ts ${serverName} ./.claude/temp/example.ts\`
 Cleanup: \`rm ./.claude/temp/example.ts\`
 
-## Response Parsing
+## Best Practices
 
-**Always inspect response first, then extract data:**
+- **Inspect first:** Always log responses to see structure before processing
+- **Avoid loops:** Use tool capabilities instead of iterating client-side
+- **Start small:** Test with minimal data before scaling up
+- **Batch operations:** Process multiple items in one call when possible
 
+**Response parsing:**
 \`\`\`typescript
 const text = result.content?.[0]?.text;
 const parsed = text ? JSON.parse(text) : result;
 
-// Log to see actual structure
+// Inspect structure first
 console.log('Response:', JSON.stringify(parsed, null, 2));
 
-// Then extract (common: .items, .data, .rows, or direct)
+// Extract (common: .items, .data, .rows, or direct)
 const data = parsed.items || parsed.data || parsed.rows || parsed;
 \`\`\`
 
