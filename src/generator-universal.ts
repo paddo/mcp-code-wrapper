@@ -594,6 +594,7 @@ async function disableMCPServers(mcpJsonPath: string) {
     // Disable MCPs
     settings.enabledMcpjsonServers = [];
     settings.enableAllProjectMcpServers = false;
+    settings.disabledMcpjsonServers = [];
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`🔕 Disabled MCPs in settings.local.json`);
@@ -668,6 +669,7 @@ async function restoreProject(projectPath: string) {
 
     settings.enabledMcpjsonServers = serverNames;
     settings.enableAllProjectMcpServers = true;
+    settings.disabledMcpjsonServers = [];
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`✅ Re-enabled MCPs in settings.local.json`);
