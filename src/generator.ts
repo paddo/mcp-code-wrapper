@@ -277,10 +277,22 @@ function createWrapperProxy(client: MCPClient) {
 
 /**
  * Detect if this is a TypeScript local server (wrappers in .mcp-server/dist/wrappers/)
+ * This checks if the SERVER ITSELF is built locally, not if the project has any local servers
  */
 async function isTypescriptLocal(serverName: string): Promise<boolean> {
   try {
     const { stat } = await import('fs/promises');
+    const config = await loadServerConfig(serverName);
+
+    // Check if the command points to a local .mcp-server directory
+    const isLocalServer = config.command.includes('.mcp-server') ||
+                          config.args.some(arg => arg.includes('.mcp-server'));
+
+    if (!isLocalServer) {
+      return false;
+    }
+
+    // Verify the wrappers directory exists
     const wrappersPath = join(process.cwd(), '.mcp-server', 'dist', 'wrappers');
     await stat(wrappersPath);
     return true;
