@@ -850,6 +850,9 @@ function printRestartMessage() {
   console.log(`⚠️  IMPORTANT: Restart Claude Code to load new Skills`);
   console.log(`   Run: claude -c`);
   console.log();
+  console.log(`   ⚠️  When Claude prompts to enable MCPs: DECLINE/TOGGLE OFF`);
+  console.log(`   Skills use progressive discovery - MCPs stay disabled.`);
+  console.log();
   console.log(`   Skills will use .mcp.json config to spawn servers on-demand.`);
   console.log(`   MCPs are disabled but config is preserved for the executor.`);
 }
@@ -864,17 +867,6 @@ async function generateSkillWrapper(projectPath: string, serverName: string, wra
 
   // Generate capability-focused description from actual tool metadata
   const description = await generateSkillDescription(wrapperDir, tools, env);
-
-  // Create skill.json
-  const skillJson = {
-    name: skillName,
-    description,
-    version: "1.0.0"
-  };
-  await fs.writeFile(
-    path.join(skillDir, 'skill.json'),
-    JSON.stringify(skillJson, null, 2)
-  );
 
   // Extract actual wrapper name from path (handles deduplicated wrappers)
   const wrapperName = path.basename(wrapperDir);
@@ -938,8 +930,13 @@ const result = await ${toolName}(${exampleParams});`;
 const result = await tool_name({ param: 'value' });`;
   }
 
-  // Create instructions.md pointing to the wrapper
-  const instructions = `# ${serverName} MCP Wrapper
+  // Create SKILL.md with YAML frontmatter
+  const skillContent = `---
+name: ${skillName}
+description: ${description}
+---
+
+# ${serverName} MCP Wrapper
 
 This skill provides access to the ${serverName} MCP server through a code execution API.
 
@@ -960,36 +957,45 @@ ${exampleCode}
 \`\`\`
 `;
   await fs.writeFile(
-    path.join(skillDir, 'instructions.md'),
-    instructions
+    path.join(skillDir, 'SKILL.md'),
+    skillContent
   );
 
   console.log(`   ✅ Created skill: .claude/skills/${skillName}/`);
 }
 
 function showHelp() {
+  // ANSI color codes
+  const bold = '\x1b[1m';
+  const cyan = '\x1b[36m';
+  const green = '\x1b[32m';
+  const yellow = '\x1b[33m';
+  const blue = '\x1b[34m';
+  const dim = '\x1b[2m';
+  const reset = '\x1b[0m';
+
   console.log(`
-MCP Code Wrapper - Generate progressive discovery wrappers for MCP servers
+${bold}${cyan}MCP Code Wrapper${reset} ${dim}- Generate progressive discovery wrappers for MCP servers${reset}
 
-USAGE:
-  npx mcp-code-wrapper <directory>    Generate wrappers for project
-  npx mcp-code-wrapper --global       Generate wrappers for global MCPs
-  npx mcp-code-wrapper --restore [dir] Remove wrappers and re-enable MCPs
-  npx mcp-code-wrapper --help         Show this help
+${bold}USAGE:${reset}
+  ${green}npx mcp-code-wrapper${reset} ${yellow}<directory>${reset}    Generate wrappers for project
+  ${green}npx mcp-code-wrapper${reset} ${yellow}--global${reset}       Generate wrappers for global MCPs
+  ${green}npx mcp-code-wrapper${reset} ${yellow}--restore${reset} [dir] Remove wrappers and re-enable MCPs
+  ${green}npx mcp-code-wrapper${reset} ${yellow}--help${reset}         Show this help
 
-EXAMPLES:
-  npx mcp-code-wrapper .              # Current directory
-  npx mcp-code-wrapper /path/to/app   # Specific project
-  npx mcp-code-wrapper --global       # Global ~/.claude/ MCPs
-  npx mcp-code-wrapper --restore      # Restore current directory
-  npx mcp-code-wrapper --restore .    # Restore current directory
+${bold}EXAMPLES:${reset}
+  ${green}npx mcp-code-wrapper .${reset}              ${dim}# Current directory${reset}
+  ${green}npx mcp-code-wrapper /path/to/app${reset}   ${dim}# Specific project${reset}
+  ${green}npx mcp-code-wrapper --global${reset}       ${dim}# Global ~/.claude/ MCPs${reset}
+  ${green}npx mcp-code-wrapper --restore${reset}      ${dim}# Restore current directory${reset}
+  ${green}npx mcp-code-wrapper --restore .${reset}    ${dim}# Restore current directory${reset}
 
-OPTIONS:
-  --no-disable                        Keep MCPs enabled after generating wrappers
-  --help, -h                          Show this help message
+${bold}OPTIONS:${reset}
+  ${yellow}--no-disable${reset}                        Keep MCPs enabled after generating wrappers
+  ${yellow}--help, -h${reset}                          Show this help message
 
-MORE INFO:
-  https://github.com/paddo/mcp-code-wrapper
+${bold}MORE INFO:${reset}
+  ${blue}https://github.com/paddo/mcp-code-wrapper${reset}
 `);
 }
 

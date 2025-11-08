@@ -96,6 +96,8 @@ Looks for `~/.claude/mcp.json` and generates wrappers in `~/.claude/.mcp-wrapper
 claude -c
 ```
 
+**⚠️ Important:** When Claude Code restarts and prompts to enable MCPs, **decline/toggle them OFF**. The Skills use progressive discovery - MCPs stay disabled and are spawned on-demand by the wrapper.
+
 Skills will use `.mcp.json` config to spawn servers on-demand with progressive discovery.
 
 ## Token Economics
