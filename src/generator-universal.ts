@@ -516,6 +516,30 @@ async function disableMCPServers(mcpJsonPath: string) {
 
   await fs.writeFile(mcpJsonPath, JSON.stringify(config, null, 2));
   console.log(`🔕 Disabled ${Object.keys(servers).length} MCP servers`);
+
+  // Also disable in settings.local.json if it exists
+  const projectPath = path.dirname(mcpJsonPath);
+  const settingsPath = path.join(projectPath, '.claude', 'settings.local.json');
+
+  try {
+    const settingsContent = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(settingsContent);
+
+    // Create backup
+    const settingsBackupPath = settingsPath + '.backup';
+    await fs.writeFile(settingsBackupPath, settingsContent);
+    console.log(`💾 Created backup: .claude/settings.local.json.backup`);
+
+    // Disable MCPs
+    settings.enabledMcpjsonServers = [];
+    settings.enableAllProjectMcpServers = false;
+
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    console.log(`🔕 Disabled MCPs in settings.local.json`);
+  } catch (e) {
+    // settings.local.json doesn't exist, that's fine
+  }
+
   console.log(`   MCPs stay in .mcp.json for executor reference`);
   console.log(`   Restore with: npx mcp-code-wrapper --restore`);
 }
@@ -561,6 +585,20 @@ async function restoreProject(projectPath: string) {
     console.log(`🗑️  Removed backup file`);
   } catch (e) {
     console.log(`⚠️  No .mcp.json.backup found`);
+  }
+
+  // Restore settings.local.json from backup if it exists
+  const settingsPath = path.join(projectPath, '.claude', 'settings.local.json');
+  const settingsBackupPath = settingsPath + '.backup';
+
+  try {
+    const settingsBackupContent = await fs.readFile(settingsBackupPath, 'utf-8');
+    await fs.writeFile(settingsPath, settingsBackupContent);
+    await fs.rm(settingsBackupPath);
+    console.log(`✅ Restored .claude/settings.local.json from backup`);
+    console.log(`🗑️  Removed backup file`);
+  } catch (e) {
+    // No backup found, that's fine
   }
 
   console.log(`\n✅ Project restored successfully`);
