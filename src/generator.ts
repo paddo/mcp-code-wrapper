@@ -1920,21 +1920,23 @@ async function main() {
   // Project mode: use provided path or current directory
   const projectPath = pathArgs.length > 0 ? path.resolve(pathArgs[0]) : process.cwd();
   if (pathArgs.length <= 1) {
+    // Check if projectPath is a directory
+    let isDir = false;
     try {
       const stat = await fs.stat(projectPath);
-      if (stat.isDirectory()) {
-        // Auto-discover and generate all MCPs
-        await generateAllFromProject(projectPath, true, disableMCPs, interactive, specifiedServers);
-        return;
-      }
+      isDir = stat.isDirectory();
     } catch (error: any) {
-      // Check if it's just a "not a directory" error
-      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
-        // Not a directory, continue with other parsing
-      } else {
-        // Actual error in generateAllFromProject, re-throw
+      // Only swallow ENOENT/ENOTDIR from fs.stat - other errors should bubble up
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') {
         throw error;
       }
+      // If ENOENT/ENOTDIR, isDir remains false and we continue to traditional CLI parsing
+    }
+
+    if (isDir) {
+      // No try-catch here - let errors from generateAllFromProject bubble up to top-level handler
+      await generateAllFromProject(projectPath, true, disableMCPs, interactive, specifiedServers);
+      return;
     }
   }
 

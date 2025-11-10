@@ -1,6 +1,6 @@
 {
   "name": "mcp-code-wrapper",
-  "version": "0.1.0-beta.36",
+  "version": "0.1.0-beta.37",
   "description": "⚠️ EXPERIMENTAL - Generate code execution wrappers for MCP servers with progressive tool discovery to save up-front context",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,6 @@
     "type": "git",
     "url": "git+https://github.com/paddo/mcp-code-wrapper.git"
   },
-  "packageManager": "pnpm@10.20.0",
   "devDependencies": {
     "@types/node": "^24.10.0",
     "tsx": "^4.20.6",
