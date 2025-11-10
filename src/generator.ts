@@ -1107,9 +1107,13 @@ async function generateAllFromProject(
     }
   }
 
+  // Ensure .mcp-wrappers directory exists
+  const wrappersDir = path.join(projectPath, '.mcp-wrappers');
+  await fs.mkdir(wrappersDir, { recursive: true });
+
   // Save server-to-wrapper mapping
   if (serverToWrapper.size > 0) {
-    const mappingPath = path.join(projectPath, '.mcp-wrappers', '.mcp-server-mapping.json');
+    const mappingPath = path.join(wrappersDir, '.mcp-server-mapping.json');
     const mapping: Record<string, string> = {};
     for (const [server, wrapper] of serverToWrapper.entries()) {
       mapping[server] = wrapper;
@@ -1119,8 +1123,6 @@ async function generateAllFromProject(
   }
 
   // Write runtime executor from embedded template
-  const wrappersDir = path.join(projectPath, '.mcp-wrappers');
-  await fs.mkdir(wrappersDir, { recursive: true });
   const executorDest = path.join(wrappersDir, '.runtime-executor.ts');
   await fs.writeFile(executorDest, RUNTIME_EXECUTOR_TEMPLATE);
   console.log(`\n📄 Created .runtime-executor.ts in .mcp-wrappers/`);
